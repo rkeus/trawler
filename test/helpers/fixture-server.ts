@@ -8,6 +8,8 @@ export interface Route {
   location?: string;
   headers?: Record<string, string>;
   delayMs?: number;
+  /** sends the body in timed parts (delays are relative to the previous part) */
+  stream?: { delayMs: number; body: string }[];
 }
 
 /** Keys are pathnames ("/a.css") or pathname+query ("/a.css?v=1") for exact query matches. */
@@ -39,6 +41,19 @@ export async function startFixtureServer(build: (origin: string) => Routes): Pro
       const headers: Record<string, string> = { ...route.headers };
       if (route.type) headers['content-type'] = route.type;
       if (route.location) headers.location = route.location;
+      if (route.stream) {
+        res.writeHead(route.status ?? 200, headers);
+        const parts = route.stream;
+        let at = 0;
+        parts.forEach((part, i) => {
+          at += part.delayMs;
+          setTimeout(() => {
+            res.write(part.body);
+            if (i === parts.length - 1) res.end();
+          }, at);
+        });
+        return;
+      }
       res.writeHead(route.status ?? (route.location ? 301 : 200), headers);
       res.end(req.method === 'HEAD' ? undefined : (route.body ?? ''));
     };
