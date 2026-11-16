@@ -1,0 +1,23 @@
+{
+  "name": "trawler",
+  "version": "0.1.0",
+  "description": "Desktop website/template downloader that detects static vs JS-rendered sites and mirrors them locally",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "parse5": "^8.1.1",
+    "postcss": "^8.5.33",
+    "postcss-safe-parser": "^7.1.0",
+    "postcss-value-parser": "^4.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  }
+}
