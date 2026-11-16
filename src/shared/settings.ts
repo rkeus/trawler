@@ -57,8 +57,16 @@ const DEFAULTS: Settings = {
   },
 };
 
-/** Shallow-frozen defaults. Never mutate; resolveSettings() returns a deep clone. */
-export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze(DEFAULTS);
+function deepFreeze<T>(value: T): T {
+  if (value !== null && typeof value === 'object') {
+    for (const v of Object.values(value)) deepFreeze(v);
+    Object.freeze(value);
+  }
+  return value;
+}
+
+/** Deep-frozen defaults. Never mutate; resolveSettings() returns a deep clone. */
+export const DEFAULT_SETTINGS: Readonly<Settings> = deepFreeze(DEFAULTS);
 
 export interface ResolvedSettings {
   settings: Settings;
@@ -181,7 +189,7 @@ export function resolveSettings(input: unknown): ResolvedSettings {
   }
 
   for (const [key, value] of Object.entries(input)) {
-    if (key in INT_RANGES) {
+    if (Object.hasOwn(INT_RANGES, key)) {
       const k = key as IntKey;
       const [min, max] = INT_RANGES[k];
       if (typeof value !== 'number' || !Number.isFinite(value)) {

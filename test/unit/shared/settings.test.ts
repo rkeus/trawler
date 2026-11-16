@@ -94,6 +94,20 @@ describe('resolveSettings', () => {
     expect(resolveSettings({ bogus: 1 }).warnings).toHaveLength(1);
     expect(resolveSettings(42).warnings).toHaveLength(1);
   });
+
+  it('treats prototype-named keys as unknown instead of crashing', () => {
+    expect(() => resolveSettings({ toString: 5, constructor: 1 })).not.toThrow();
+    expect(resolveSettings({ toString: 5 }).warnings).toEqual(['Unknown setting "toString" ignored']);
+    expect(resolveSettings(JSON.parse('{"__proto__": 3}')).warnings).toHaveLength(1);
+  });
+
+  it('deep-freezes DEFAULT_SETTINGS', () => {
+    expect(Object.isFrozen(DEFAULT_SETTINGS.detection.weights)).toBe(true);
+    expect(Object.isFrozen(DEFAULT_SETTINGS.excludePatterns)).toBe(true);
+    const { settings } = resolveSettings({});
+    settings.detection.weights.emptyMount = 9;
+    expect(DEFAULT_SETTINGS.detection.weights.emptyMount).toBe(0.3);
+  });
 });
 
 describe('compileExcludePatterns', () => {
