@@ -5,6 +5,7 @@ import type { Detection } from '../shared/types';
 import { buildAnalysisReport, type AnalysisReport } from './analysis';
 import { BlobStore } from './blob-store';
 import { crawl, resolveSeed, type CrawlResult } from './crawl';
+import { detectArchitecture } from './detect-architecture';
 import { createFetcher } from './fetcher';
 import { finalize, type FinalizeProgress } from './finalize';
 import { collectErrors, writeManifest, writeReport, type Manifest } from './manifest';
@@ -17,7 +18,19 @@ import {
 } from './output-dir';
 import { AdaptivePool } from './pool';
 import { startPreviewServer } from './preview-server';
-import type { FetchImpl, JobEvent, JobKind, JobStatus, ProgressCounters, Verifier, VerifyReport } from './types';
+import type {
+  CaptureResult,
+  Capturer,
+  FetchImpl,
+  Fetcher,
+  JobEvent,
+  JobKind,
+  JobPhase,
+  JobStatus,
+  ProgressCounters,
+  Verifier,
+  VerifyReport,
+} from './types';
 import { TRAWLER_VERSION } from './version';
 
 export interface JobRequest {
@@ -32,7 +45,11 @@ export interface JobRequest {
 
 export interface JobPorts {
   fetchImpl: FetchImpl;
+  /** hidden-browser renderer (desktop app); enables detection and JS mode */
+  capturer?: Capturer;
   verifier?: Verifier;
+  /** wraps the job's fetcher, e.g. with withChallengeSolver (desktop app) */
+  decorateFetcher?: (fetcher: Fetcher, signal: AbortSignal) => Fetcher;
 }
 
 export interface JobControl {
@@ -61,16 +78,6 @@ class JobError extends Error {}
 
 const EMPTY_COUNTERS: ProgressCounters = { pagesDone: 0, pagesQueued: 0, assetsDone: 0, assetsQueued: 0, bytes: 0, errors: 0 };
 
-function resolveMode(settings: Settings, warnings: string[]): 'static' | 'js' {
-  if (settings.mode === 'js') {
-    throw new JobError('JS mode needs the built-in browser, which is only available in the desktop app.');
-  }
-  if (settings.mode === 'auto') {
-    warnings.push('Architecture detection needs the built-in browser; using static mode.');
-  }
-  return 'static';
-}
-
 async function resolveFolderPolicy(req: JobRequest, outputDir: string): Promise<ConcreteFolderPolicy> {
   if (req.folderPolicy) return req.folderPolicy;
   if (req.settings.nonEmptyFolder !== 'ask') return req.settings.nonEmptyFolder;
@@ -82,8 +89,9 @@ async function resolveFolderPolicy(req: JobRequest, outputDir: string): Promise<
 
 /**
  * Runs an analyze or download job. Never throws: failures come back as status "failed", cancellation as
- * "cancelled". The output folder is only touched after the start URL has loaded, and nothing from an earlier
- * mirror is deleted unless the new download succeeds.
+ * "cancelled". With a capturer, the start page is rendered first to detect the architecture (spec §4.2).
+ * The output folder is only touched after the start URL has loaded, and nothing from an earlier mirror is
+ * deleted unless the new download succeeds.
  */
 export async function runJob(req: JobRequest, ports: JobPorts, control: JobControl): Promise<JobResult> {
   const { signal } = control;
@@ -97,9 +105,16 @@ export async function runJob(req: JobRequest, ports: JobPorts, control: JobContr
   const { settings } = req;
   const warnings: string[] = [];
   const startedAt = new Date().toISOString();
-  const phase = (p: 'crawling' | 'rewriting' | 'verifying' | 'done'): void => emit({ type: 'phase', phase: p });
+  const phase = (p: JobPhase): void => emit({ type: 'phase', phase: p });
+
+  // aborted on cancel, or when the crawl halts on a fatal error: stops requests already in flight
+  const fetchAbort = new AbortController();
+  const onUserAbort = (): void => fetchAbort.abort();
+  if (signal.aborted) fetchAbort.abort();
+  else signal.addEventListener('abort', onUserAbort, { once: true });
 
   let mode: 'static' | 'js' = 'static';
+  let detection: Detection | undefined;
   let outputDir: string | undefined;
   let blobStore: BlobStore | undefined;
   let previous: Manifest | undefined;
@@ -112,6 +127,7 @@ export async function runJob(req: JobRequest, ports: JobPorts, control: JobContr
     startedAt,
     finishedAt: new Date().toISOString(),
     mode,
+    ...(detection ? { detection } : {}),
     settings,
     status,
     errors: collectErrors(result!),
@@ -119,15 +135,25 @@ export async function runJob(req: JobRequest, ports: JobPorts, control: JobContr
 
   try {
     if (!normalizeUrl(req.seedUrl)) throw new JobError(`Invalid start URL: ${req.seedUrl}`);
-    mode = resolveMode(settings, warnings);
+    if (settings.mode === 'js' && !ports.capturer) {
+      throw new JobError('JS mode needs the built-in browser, which is only available in the desktop app.');
+    }
+    if (settings.mode === 'auto' && !ports.capturer) {
+      warnings.push('Architecture detection needs the built-in browser; using static mode.');
+    }
+    mode = settings.mode === 'js' ? 'js' : 'static';
     if (req.kind === 'download' && !req.outputDir) throw new JobError('Choose an output folder first.');
+    const wantDetection = Boolean(ports.capturer) && (settings.mode === 'auto' || req.kind === 'analyze');
 
     const pool = new AdaptivePool({ concurrency: settings.concurrency, delayMs: settings.requestDelayMs });
-    const fetcher = createFetcher({
+    const baseFetcher = createFetcher({
       fetchImpl: ports.fetchImpl,
       timeoutMs: settings.requestTimeoutMs,
+      idleTimeoutMs: settings.idleTimeoutMs,
       retries: settings.retries,
-      signal,
+      signal: fetchAbort.signal,
+      memoryLimitBytes: settings.memoryBodyLimitBytes,
+      spillTo: () => blobStore,
       ...(settings.userAgent ? { userAgent: settings.userAgent } : {}),
       onThrottle: () => {
         if (pool.reduce()) {
@@ -135,10 +161,28 @@ export async function runJob(req: JobRequest, ports: JobPorts, control: JobContr
         }
       },
     });
+    const fetcher = ports.decorateFetcher ? ports.decorateFetcher(baseFetcher, fetchAbort.signal) : baseFetcher;
 
-    phase('crawling');
+    phase(wantDetection ? 'detecting' : 'crawling');
     // the start URL must load before the output folder is touched
     const seed = await resolveSeed(fetcher, req.seedUrl);
+
+    let seedCapture: CaptureResult | undefined;
+    if (wantDetection) {
+      try {
+        const found = await detectArchitecture(seed, ports.capturer!, settings, fetchAbort.signal);
+        detection = found.detection;
+        seedCapture = found.capture;
+        if (settings.mode === 'auto') mode = detection.verdict === 'static' ? 'static' : 'js';
+        emit({ type: 'detection', detection, mode });
+      } catch (err) {
+        if (signal.aborted) throw err;
+        warnings.push(
+          `Architecture detection failed (${err instanceof Error ? err.message : String(err)}); using ${mode === 'js' ? 'JS' : 'static'} mode.`,
+        );
+      }
+      phase('crawling');
+    }
 
     let policy: ConcreteFolderPolicy | undefined;
     if (req.kind === 'download') {
@@ -159,17 +203,22 @@ export async function runJob(req: JobRequest, ports: JobPorts, control: JobContr
       signal,
       emit,
       kind: req.kind,
+      mode,
+      ...(ports.capturer ? { capturer: ports.capturer } : {}),
+      ...(mode === 'js' && seedCapture ? { seedCapture } : {}),
+      onHalt: () => fetchAbort.abort(),
       ...(blobStore ? { blobStore } : {}),
     });
     warnings.push(...result.warnings);
 
     if (req.kind === 'analyze') {
-      const analysis = buildAnalysisReport(result, settings, mode, undefined);
+      const analysis = buildAnalysisReport(result, settings, mode, detection);
       phase('done');
       return {
         kind: 'analyze',
         status: signal.aborted ? 'cancelled' : 'done',
         mode,
+        ...(detection ? { detection } : {}),
         analysis,
         counters: result.counters,
         warnings,
@@ -177,7 +226,16 @@ export async function runJob(req: JobRequest, ports: JobPorts, control: JobContr
     }
 
     phase('rewriting');
-    const fin = await finalize({ outputDir: outputDir!, crawl: result, blobStore: blobStore!, settings, progress: placed });
+    const fin = await finalize({
+      outputDir: outputDir!,
+      crawl: result,
+      blobStore: blobStore!,
+      settings,
+      progress: placed,
+      ...(policy === 'overwrite' && previous
+        ? { previousPaths: new Set(previous.files.map((f) => f.path.toLowerCase())) }
+        : {}),
+    });
     await blobStore!.clear();
     const errors = collectErrors(result);
     const status: JobStatus = signal.aborted ? 'cancelled' : errors.length > 0 ? 'done_with_errors' : 'done';
@@ -224,6 +282,7 @@ export async function runJob(req: JobRequest, ports: JobPorts, control: JobContr
       kind: 'download',
       status,
       mode,
+      ...(detection ? { detection } : {}),
       outputDir: outputDir!,
       basePath: fin.rootPath,
       manifestPath,
@@ -253,11 +312,14 @@ export async function runJob(req: JobRequest, ports: JobPorts, control: JobContr
       kind: req.kind,
       status: cancelled ? 'cancelled' : 'failed',
       mode,
+      ...(detection ? { detection } : {}),
       counters: result?.counters ?? EMPTY_COUNTERS,
       warnings,
       ...(cancelled ? {} : { error: message }),
       ...(outputDir ? { outputDir } : {}),
       ...(manifestPath ? { manifestPath } : {}),
     };
+  } finally {
+    signal.removeEventListener('abort', onUserAbort);
   }
 }

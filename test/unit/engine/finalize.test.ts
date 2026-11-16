@@ -74,6 +74,15 @@ describe('finalize', () => {
     await finalize({ outputDir: out, crawl, blobStore: blobs, settings });
     expect(await read(out, 'html/app.js')).toBe('fetch("/html/img/b.png")');
   });
+
+  it('clears a previous-mirror file that blocks a needed directory (overwrite)', async () => {
+    const { out, blobs, crawl } = await setup();
+    await fs.writeFile(path.join(out, 'html'), 'old file from the previous mirror');
+    const { settings } = resolveSettings({});
+    const r = await finalize({ outputDir: out, crawl, blobStore: blobs, settings, previousPaths: new Set(['html']) });
+    expect(r.files.length).toBe(6);
+    expect((await fs.stat(path.join(out, 'html'))).isDirectory()).toBe(true);
+  });
 });
 
 describe('rewriteJsAbsoluteUrls', () => {

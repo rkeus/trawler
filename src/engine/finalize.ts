@@ -14,6 +14,8 @@ export interface FinalizeOptions {
   blobStore: BlobStore;
   settings: Settings;
   progress?: FinalizeProgress;
+  /** overwrite only: lowercased paths of the previous mirror; such a file may block a directory the new mirror needs */
+  previousPaths?: ReadonlySet<string>;
 }
 
 export interface FinalizeResult {
@@ -31,6 +33,21 @@ export interface FinalizeProgress {
 function byStableOrder(a: CrawlRecord, b: CrawlRecord): number {
   if (a.isPage !== b.isPage) return a.isPage ? -1 : 1;
   return a.finalUrl < b.finalUrl ? -1 : a.finalUrl > b.finalUrl ? 1 : 0;
+}
+
+/** A previous-mirror file may sit where the new mirror needs a directory ("sub" vs "sub/x.png"): remove it. */
+async function clearClashingPreviousFiles(outputDir: string, local: string, previous: ReadonlySet<string>): Promise<void> {
+  const parts = local.split('/');
+  for (let i = 1; i < parts.length; i++) {
+    const ancestor = parts.slice(0, i).join('/');
+    if (!previous.has(ancestor.toLowerCase())) continue;
+    const p = path.join(outputDir, ...ancestor.split('/'));
+    try {
+      if ((await fs.stat(p)).isFile()) await fs.rm(p, { force: true });
+    } catch {
+      // missing: nothing to clear
+    }
+  }
 }
 
 /**
@@ -69,6 +86,7 @@ export async function finalize(opts: FinalizeOptions): Promise<FinalizeResult> {
   for (const r of ok) {
     const local = mapper.get(r.finalUrl)!;
     const target = path.join(outputDir, ...local.split('/'));
+    if (opts.previousPaths) await clearClashingPreviousFiles(outputDir, local, opts.previousPaths);
     await fs.mkdir(path.dirname(target), { recursive: true });
 
     if (isHtmlContentType(r.contentType) || r.kind === 'css' || (r.kind === 'js' && settings.rewriteJsAbsoluteUrls)) {
