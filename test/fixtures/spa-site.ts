@@ -18,6 +18,7 @@ export function spaSite(): Routes {
   return {
     '/app/': { type: 'text/html; charset=utf-8', body: SPA_SHELL },
     '/app/about': { type: 'text/html; charset=utf-8', body: SPA_SHELL },
+    '/app/report': { type: 'application/pdf', body: Buffer.from('%PDF-1.4 fake report') },
     '/app/assets/index-AbCdEf12.js': { type: 'text/javascript', body: 'import("./chunk-1234abcd.js");' },
     '/app/assets/chunk-1234abcd.js': { type: 'text/javascript', body: 'export default 1;' },
     '/app/api/items.json': { type: 'application/json', body: '[1,2,3]' },

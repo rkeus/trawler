@@ -176,6 +176,27 @@ describe('crawl (download)', () => {
     expect(misc.requests.filter((p) => p === '/s/start').length - before).toBe(1);
   });
 
+
+  it('parses pages whose bodies were spilled to disk', async () => {
+    // robots.txt would be spilled too with a 10-byte limit, so robots handling is off here
+    const { settings } = resolveSettings({ retries: 0, respectRobotsTxt: false });
+    const signal = new AbortController().signal;
+    const blobStore = new BlobStore(path.join(await makeTmpDir('spillcrawl'), 'blobs'));
+    await blobStore.init();
+    const r = await crawl({
+      seedUrl: `${site.url}/html/index.html`,
+      settings,
+      fetcher: createFetcher({ fetchImpl: fetch, timeoutMs: 5000, retries: 0, signal, memoryLimitBytes: 10, spillTo: () => blobStore }),
+      pool: new AdaptivePool({ concurrency: 4 }),
+      signal,
+      emit: () => undefined,
+      kind: 'download',
+      blobStore,
+    });
+    const pages = [...r.records.values()].filter((x) => x.isPage && x.fetched && !x.duplicate);
+    expect(pages).toHaveLength(5); // index, about, blog/, contact.php, private/secret.html
+    expect(pages.every((p) => p.blobId)).toBe(true);
+  });
 });
 
 describe('crawl (analyze)', () => {

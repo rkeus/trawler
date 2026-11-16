@@ -18,7 +18,7 @@ import type { AssetKind } from '../shared/types';
 import type { BlobStore } from './blob-store';
 import { AdaptivePool } from './pool';
 import { loadRobots } from './robots-loader';
-import { decodeBody, type DecodedText } from './text';
+import { decodeBody, declareUtf8, type DecodedText } from './text';
 import {
   FetchError,
   type CaptureOptions,
@@ -149,6 +149,7 @@ export async function crawl(opts: CrawlOptions): Promise<CrawlResult> {
   const counters: ProgressCounters = { pagesDone: 0, pagesQueued: 0, assetsDone: 0, assetsQueued: 0, bytes: 0, errors: 0 };
   const tasks: Promise<void>[] = [];
   let outOfScopeRedirects = 0;
+  // render tasks run in their own pool, so pages waiting for a browser window do not hold fetch slots
   const renderPool = new AdaptivePool({ concurrency: settings.renderConcurrency });
   let rendersStarted = 0;
 
@@ -168,8 +169,6 @@ export async function crawl(opts: CrawlOptions): Promise<CrawlResult> {
   const progress = (): void => emit({ type: 'progress', counters: { ...counters } });
   const find = (url: string): CrawlRecord | undefined => records.get(url) ?? landed.get(url);
   const halted = (): boolean => halt.signal.aborted;
-  const shouldRender = (): boolean =>
-    mode === 'js' && (opts.kind === 'download' || rendersStarted < settings.analyzeRenderPages);
   const captureOptions = (): CaptureOptions => ({
     timeoutMs: settings.renderTimeoutMs,
     networkIdleMs: settings.networkIdleMs,
@@ -190,6 +189,14 @@ export async function crawl(opts: CrawlOptions): Promise<CrawlResult> {
   const addReferrer = (rec: CrawlRecord, referrer?: string): void => {
     if (referrer && !rec.referrers.includes(referrer)) rec.referrers.push(referrer);
   };
+
+  /** Decides synchronously whether a new page is rendered (JS mode; analyze renders at most analyzeRenderPages). */
+  function claimRender(): boolean {
+    if (mode !== 'js') return false;
+    if (opts.kind === 'analyze' && rendersStarted >= settings.analyzeRenderPages) return false;
+    rendersStarted++;
+    return true;
+  }
 
   /** Counts an external URL; returns false when external downloads are off. */
   function allowExternal(url: string): boolean {
@@ -221,7 +228,18 @@ export async function crawl(opts: CrawlOptions): Promise<CrawlResult> {
     const rec = newRecord(url, 'page', true, depth, referrer);
     records.set(url, rec);
     counters.pagesQueued++;
-    tasks.push(pool.run(() => fetchPage(rec, prefetched, prefetchedCapture), halt.signal));
+    let render: boolean;
+    if (prefetchedCapture) {
+      rendersStarted++; // a reused render counts toward the analyze limit too
+      render = true;
+    } else {
+      render = claimRender();
+    }
+    tasks.push(
+      render
+        ? renderPool.run(() => fetchPage(rec, prefetched, prefetchedCapture, true), halt.signal)
+        : pool.run(() => fetchPage(rec, prefetched, undefined, false), halt.signal),
+    );
     return rec;
   }
 
@@ -298,19 +316,27 @@ export async function crawl(opts: CrawlOptions): Promise<CrawlResult> {
 
   const cancelled = (url: string): FetchError => new FetchError('Cancelled', url, 'aborted');
 
-  async function render(rec: CrawlRecord): Promise<CaptureResult> {
-    rendersStarted++;
+  async function capture(rec: CrawlRecord): Promise<CaptureResult> {
     try {
-      return await renderPool.run(() => opts.capturer!.capture(rec.url, captureOptions()), halt.signal);
+      return await opts.capturer!.capture(rec.url, captureOptions());
     } catch (err) {
       if (err instanceof FetchError) throw err;
+      if (halted()) throw cancelled(rec.url);
       throw new FetchError(`Rendering failed: ${err instanceof Error ? err.message : String(err)}`, rec.url, 'network');
     }
+  }
+
+  /** The start page was also fetched raw: prefer those exact bytes (keeps legacy charsets intact). */
+  function withServedBody(cap: CaptureResult, prefetched?: FetchedResource): CaptureResult {
+    if (cap.body || !prefetched || prefetched.spilledBlobId) return cap;
+    if (normalizeUrl(prefetched.finalUrl) !== normalizeUrl(cap.finalUrl)) return cap;
+    return { ...cap, body: prefetched.body, ...(prefetched.contentType ? { contentType: prefetched.contentType } : {}) };
   }
 
   /** Adopts a response the browser already loaded, so it is not fetched again. */
   async function adopt(r: CapturedResponse, referrer: string): Promise<void> {
     if (halted() || r.status < 200 || r.status >= 300) return;
+    if (r.body.length > settings.memoryBodyLimitBytes) return; // large media: fetched with streaming if referenced
     const n = normalizeUrl(r.url);
     if (!n) return;
     const url = canon(n);
@@ -321,6 +347,11 @@ export async function crawl(opts: CrawlOptions): Promise<CrawlResult> {
     const rec = newRecord(url, kind, false, 0, referrer);
     records.set(url, rec);
     counters.assetsQueued++;
+    const requested = r.requestUrl ? normalizeUrl(r.requestUrl) : null;
+    if (requested && canon(requested) !== url && !find(canon(requested))) {
+      aliases.set(canon(requested), url);
+      landed.set(canon(requested), rec); // a later ref to the pre-redirect URL is not fetched again
+    }
     const res: FetchedResource = {
       url,
       finalUrl: url,
@@ -336,6 +367,7 @@ export async function crawl(opts: CrawlOptions): Promise<CrawlResult> {
       for (const ref of extractCssRefs(decodeBody(r.body, r.contentType).text, url)) enqueueAsset(ref.url, ref.kind, url);
     }
     counters.assetsDone++;
+    progress();
   }
 
   async function handleCapture(rec: CrawlRecord, cap: CaptureResult): Promise<void> {
@@ -346,12 +378,19 @@ export async function crawl(opts: CrawlOptions): Promise<CrawlResult> {
       return;
     }
     if (cap.status >= 400) throw new FetchError(`HTTP ${cap.status}`, rec.url, 'http', cap.status);
-    const body = Buffer.from(cap.html, 'utf8');
+    if (cap.contentType && !isHtmlContentType(cap.contentType)) {
+      // the link serves a file (PDF, image…), not a page: fetch it as an asset
+      await fetchPageStatic(rec);
+      return;
+    }
+    // raw served bytes when available; otherwise the decoded text, stored as UTF-8 and declared as such
+    const body = cap.body ?? Buffer.from(declareUtf8(cap.html), 'utf8');
+    const contentType = cap.body ? (cap.contentType ?? 'text/html') : 'text/html; charset=utf-8';
     const res: FetchedResource = {
       url: rec.url,
       finalUrl: cap.finalUrl,
       status: cap.status,
-      contentType: 'text/html; charset=utf-8',
+      contentType,
       headers: {},
       body,
       size: body.length,
@@ -366,33 +405,44 @@ export async function crawl(opts: CrawlOptions): Promise<CrawlResult> {
     for (const p of [...served.pages, ...live.pages]) enqueuePage(p.url, rec.depth + 1, rec.finalUrl);
   }
 
-  async function fetchPage(rec: CrawlRecord, prefetched?: FetchedResource, prefetchedCapture?: CaptureResult): Promise<void> {
+  async function fetchPageStatic(rec: CrawlRecord, prefetched?: FetchedResource): Promise<void> {
+    const res = prefetched ?? (await fetcher.fetch(rec.url));
+    const final = canon(normalizeUrl(res.finalUrl) ?? rec.url);
+    if (final !== rec.url && !inScope(final, scope)) {
+      rec.skipped = `Redirects outside the crawl scope to ${final}`;
+      outOfScopeRedirects++;
+      return;
+    }
+    if (!accept(rec, res, final)) return;
+    if (!isHtmlContentType(res.contentType)) {
+      // a page link that serves something else (PDF, image…): keep it as an asset
+      rec.isPage = false;
+      rec.kind = kindFromUrl(rec.finalUrl, res.contentType);
+      await store(rec, res, false);
+      return;
+    }
+    await store(rec, res, true);
+    const { text } = await textOf(res);
+    const parsed = extractHtmlRefs(text, rec.finalUrl);
+    for (const a of parsed.assets) enqueueAsset(a.url, a.kind, rec.finalUrl);
+    for (const p of parsed.pages) enqueuePage(p.url, rec.depth + 1, rec.finalUrl);
+  }
+
+  async function fetchPage(
+    rec: CrawlRecord,
+    prefetched: FetchedResource | undefined,
+    prefetchedCapture: CaptureResult | undefined,
+    render: boolean,
+  ): Promise<void> {
     try {
-      if (!prefetched && !prefetchedCapture && halted()) throw cancelled(rec.url);
-      if (prefetchedCapture || shouldRender()) {
-        await handleCapture(rec, prefetchedCapture ?? (await render(rec)));
+      if (render) {
+        if (!prefetchedCapture && halted()) throw cancelled(rec.url);
+        const cap = prefetchedCapture ?? (await capture(rec));
+        await handleCapture(rec, withServedBody(cap, prefetched));
         return;
       }
-      const res = prefetched ?? (await fetcher.fetch(rec.url));
-      const final = canon(normalizeUrl(res.finalUrl) ?? rec.url);
-      if (final !== rec.url && !inScope(final, scope)) {
-        rec.skipped = `Redirects outside the crawl scope to ${final}`;
-        outOfScopeRedirects++;
-        return;
-      }
-      if (!accept(rec, res, final)) return;
-      if (!isHtmlContentType(res.contentType)) {
-        // a page link that serves something else (PDF, image…): keep it as an asset
-        rec.isPage = false;
-        rec.kind = kindFromUrl(rec.finalUrl, res.contentType);
-        await store(rec, res, false);
-        return;
-      }
-      await store(rec, res, true);
-      const { text } = await textOf(res);
-      const parsed = extractHtmlRefs(text, rec.finalUrl);
-      for (const a of parsed.assets) enqueueAsset(a.url, a.kind, rec.finalUrl);
-      for (const p of parsed.pages) enqueuePage(p.url, rec.depth + 1, rec.finalUrl);
+      if (!prefetched && halted()) throw cancelled(rec.url);
+      await fetchPageStatic(rec, prefetched);
     } catch (err) {
       fail(rec, err);
     } finally {
