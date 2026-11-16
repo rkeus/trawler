@@ -15,14 +15,15 @@ export interface CliRun {
   result: any;
 }
 
-/** Spawns the real Electron binary on the built main bundle in CLI mode. Run `npm run build:main` first. */
+/**
+ * Spawns the real Electron binary on the built main bundle in CLI mode. Run `npm run build:main` first.
+ * "--" precedes the arguments (Electron's URL-argument guard on Windows); ELECTRON_RUN_AS_NODE is removed.
+ */
 export function runCli(args: string[], timeoutMs = 150000): Promise<CliRun> {
   return new Promise((resolve, reject) => {
     const env = { ...process.env };
     delete env.ELECTRON_RUN_AS_NODE;
-    // Electron aborts at startup (exit -1, no output) when a bare URL argument is followed by more arguments, so --url is passed as --url=<value>
-    const argv = args.flatMap((a, i, all) => (all[i - 1] === '--url' ? [] : a === '--url' && all[i + 1] !== undefined ? [`--url=${all[i + 1]}`] : [a]));
-    const child = spawn(ELECTRON, ['.', '--trawler-cli', ...argv], { cwd: ROOT, env });
+    const child = spawn(ELECTRON, ['.', '--', '--trawler-cli', ...args], { cwd: ROOT, env });
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', (d: Buffer) => (stdout += d.toString()));

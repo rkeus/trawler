@@ -44,4 +44,14 @@ describe('parseCliArgs', () => {
     expect(msg(['--url', '--out', 'o'])).toContain('--url needs a value');
     expect(msg([])).toContain('Usage:');
   });
+
+  it('documents the Windows-safe forms in the usage text', () => {
+    const r = parseCliArgs([...base]);
+    expect(r.kind === 'error' && r.message).toContain('--url=<url>');
+    expect(r.kind === 'error' && r.message).toContain('put -- before the options');
+  });
+
+  it('ignores a "--" separator', () => {
+    expect(parseCliArgs(['electron.exe', '.', '--', '--trawler-cli', '--url', 'https://x.com/', '--out', 'o']).kind).toBe('cli');
+  });
 });

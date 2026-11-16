@@ -1,8 +1,11 @@
 export const CLI_FLAG = '--trawler-cli';
 
-export const CLI_USAGE =
-  'Usage: trawler --trawler-cli --url <url> [--out <folder>] [--kind download|analyze] ' +
-  '[--mode auto|static|js] [--policy overwrite|merge|fail] [--settings <json>]';
+export const CLI_USAGE = [
+  'Usage: trawler --trawler-cli --url=<url> [--out=<folder>] [--kind=download|analyze] [--mode=auto|static|js]',
+  '                [--policy=overwrite|merge|fail] [--settings=<json>]',
+  'On Windows, write --url=<url> (with "=") or put -- before the options: Electron refuses to start when a',
+  'URL argument is followed by more arguments. `npm start -- --trawler-cli ...` does this for you.',
+].join('\n');
 
 export interface CliArgs {
   kind: 'download' | 'analyze';
