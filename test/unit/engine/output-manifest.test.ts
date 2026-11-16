@@ -2,7 +2,14 @@ import { describe, it, expect } from 'vitest';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { inspectOutputDir, prepareOutputDir, isInside, OutputDirError } from '../../../src/engine/output-dir';
+import {
+  inspectOutputDir,
+  prepareOutputDir,
+  isInside,
+  OutputDirError,
+  removeStaleFiles,
+  mergeFileLists,
+} from '../../../src/engine/output-dir';
 import { collectErrors, writeManifest, readManifest, type Manifest } from '../../../src/engine/manifest';
 import type { CrawlResult } from '../../../src/engine/crawl';
 import { computeScope } from '../../../src/core';
@@ -36,17 +43,34 @@ describe('output dir', () => {
     await expect(prepareOutputDir(dir, 'fail')).rejects.toBeInstanceOf(OutputDirError);
   });
 
-  it('overwrite removes only files from the previous Trawler manifest', async () => {
+  it('prepare never deletes anything and returns the previous manifest', async () => {
+    const dir = await tmp();
+    await fs.writeFile(path.join(dir, 'old.html'), 'old');
+    await writeManifest(dir, manifest(['old.html']));
+    const previous = await prepareOutputDir(dir, 'overwrite');
+    expect(previous?.files.map((f) => f.path)).toEqual(['old.html']);
+    expect(await fs.readFile(path.join(dir, 'old.html'), 'utf8')).toBe('old');
+  });
+
+  it('removeStaleFiles deletes only unreused files of the previous mirror', async () => {
     const dir = await tmp();
     await fs.mkdir(path.join(dir, 'a'), { recursive: true });
     await fs.writeFile(path.join(dir, 'a', 'old.html'), 'old');
+    await fs.writeFile(path.join(dir, 'a', 'Kept.html'), 'new');
     await fs.writeFile(path.join(dir, 'mine.txt'), 'keep me');
-    await writeManifest(dir, manifest(['a/old.html', '../outside.txt']));
-    await prepareOutputDir(dir, 'overwrite');
+    const removed = await removeStaleFiles(dir, manifest(['a/old.html', 'a/kept.html', '../outside.txt']), ['a/Kept.html']);
+    expect(removed).toEqual(['a/old.html']);
     await expect(fs.stat(path.join(dir, 'a', 'old.html'))).rejects.toBeDefined();
+    expect(await fs.readFile(path.join(dir, 'a', 'Kept.html'), 'utf8')).toBe('new');
     expect(await fs.readFile(path.join(dir, 'mine.txt'), 'utf8')).toBe('keep me');
-    await expect(fs.stat(path.join(dir, '_trawler'))).rejects.toBeDefined();
   });
+
+  it('mergeFileLists keeps previous files tracked unless replaced', () => {
+    const merged = mergeFileLists(manifest(['a.html', 'b.html']), manifest(['B.html', 'c.html']).files);
+    expect(merged.map((f) => f.path)).toEqual(['B.html', 'c.html', 'a.html']);
+    expect(mergeFileLists(undefined, manifest(['x']).files).map((f) => f.path)).toEqual(['x']);
+  });
+
 
   it('merge keeps everything', async () => {
     const dir = await tmp();

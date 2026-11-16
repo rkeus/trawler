@@ -13,11 +13,18 @@ export interface FinalizeOptions {
   crawl: CrawlResult;
   blobStore: BlobStore;
   settings: Settings;
+  progress?: FinalizeProgress;
 }
 
 export interface FinalizeResult {
   /** server path that maps to the output root, e.g. "/html/" (manifest basePath) */
   rootPath: string;
+  files: PlacedFile[];
+}
+
+/** Caller-owned progress, so a failure mid-finalize can still record what was placed. */
+export interface FinalizeProgress {
+  rootPath?: string;
   files: PlacedFile[];
 }
 
@@ -48,16 +55,17 @@ export async function finalize(opts: FinalizeOptions): Promise<FinalizeResult> {
     crawl.scope.basePath,
     ok.filter((r) => isSameHost(r.finalUrl)).map((r) => new URL(r.finalUrl).pathname),
   );
+  if (opts.progress) opts.progress.rootPath = rootPath;
   const mapper = new UrlMapper({ origin: crawl.scope.origin, rootPath });
   for (const r of ok) mapper.map(r.finalUrl, r.contentType);
   for (const [from, to] of crawl.aliases) mapper.alias(from, to);
 
   const resolveLocal = (abs: string): string | undefined => mapper.get(abs);
   const resolveLocalDir = (u: string): string | undefined => mapper.localDir(u);
-  const aliasesOf = (finalUrl: string): string[] =>
-    [...crawl.aliases].filter(([, to]) => to === finalUrl).map(([from]) => from);
+  const aliasesByTarget = new Map<string, string[]>();
+  for (const [from, to] of crawl.aliases) aliasesByTarget.set(to, [...(aliasesByTarget.get(to) ?? []), from]);
 
-  const files: PlacedFile[] = [];
+  const files: PlacedFile[] = opts.progress?.files ?? [];
   for (const r of ok) {
     const local = mapper.get(r.finalUrl)!;
     const target = path.join(outputDir, ...local.split('/'));
@@ -76,7 +84,7 @@ export async function finalize(opts: FinalizeOptions): Promise<FinalizeResult> {
 
     files.push({
       url: r.finalUrl,
-      aliases: aliasesOf(r.finalUrl),
+      aliases: aliasesByTarget.get(r.finalUrl) ?? [],
       path: local,
       status: r.status,
       contentType: r.contentType,
