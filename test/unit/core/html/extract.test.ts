@@ -74,6 +74,21 @@ describe('extractHtmlRefs', () => {
       'https://cdn.x.com/site/a.png',
     ]);
   });
+
+  it('ignores non-URL lazy attribute values', () => {
+    const html = '<div data-bg="rgba(0,0,0,.5)" data-lazy="1.5" data-image="true" data-src="img/x.jpg"></div>';
+    expect(extractHtmlRefs(html, PAGE).assets.map((a) => a.url)).toEqual([B + 'img/x.jpg']);
+  });
+
+  it('uses only the first <base href>', () => {
+    const html = '<head><base href="/one/"><base href="/two/"></head><body><img src="a.png"></body>';
+    expect(extractHtmlRefs(html, PAGE).assets.map((a) => a.url)).toEqual(['https://x.com/one/a.png']);
+  });
+
+  it('does not duplicate refs from reconstructed formatting elements', () => {
+    const { pages } = extractHtmlRefs('<p><a href="about.html">About</p><p>next</p>', PAGE);
+    expect(pages.map((p) => p.url)).toEqual([B + 'about.html']);
+  });
 });
 
 describe('walkHtml', () => {

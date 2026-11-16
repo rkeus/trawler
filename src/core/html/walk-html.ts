@@ -1,7 +1,7 @@
 import { parse } from 'parse5';
 import type { AssetKind, RefSource } from '../../shared/types';
 import { walkCss, type CssRefSource } from '../css/walk-css';
-import { attrKey, getAttr, isElement, type Element, type ParentNode, type Template, type TextNode } from './dom';
+import { attrKey, getAttr, isElement, type Element, type ParentNode, type Template } from './dom';
 import { parseSrcset, stringifySrcset } from './srcset';
 
 export type HtmlRefRole = 'asset' | 'page' | 'base';
@@ -16,6 +16,8 @@ export interface HtmlRefSite {
   tag: string;
   /** null for <style> block content */
   attr: string | null;
+  /** true for lazy-load data-* attributes: rewrite only to a downloaded local file, never absolutize */
+  optional: boolean;
 }
 
 /** string → replace, null → remove the attribute (used for <base href>), undefined → leave */
@@ -28,12 +30,19 @@ interface AttrSite {
   role: HtmlRefRole;
   kind: AssetKind | null;
   mode: AttrMode;
+  optional: boolean;
 }
 
 interface Edit {
   start: number;
   end: number;
   text: string;
+}
+
+interface WalkState {
+  /** source offsets already handled — parse5 clones formatting elements with identical locations */
+  seen: Set<number>;
+  baseSeen: boolean;
 }
 
 const LAZY_URL_ATTRS = [
@@ -70,10 +79,16 @@ function preloadKind(as: string | undefined): AssetKind | null {
   }
 }
 
+/** Lazy attributes often hold colors, numbers or flags — accept only path-like values. */
+function looksLikeUrl(raw: string): boolean {
+  if (!raw || /\s/.test(raw) || raw.includes('(')) return false;
+  return raw.includes('/') || /\.[a-z0-9]{2,5}(?:[?#]|$)/i.test(raw);
+}
+
 function attrSites(el: Element): AttrSite[] {
   const out: AttrSite[] = [];
-  const add = (attr: string, role: HtmlRefRole, kind: AssetKind | null, mode: AttrMode = 'url') =>
-    out.push({ attr, role, kind, mode });
+  const add = (attr: string, role: HtmlRefRole, kind: AssetKind | null, mode: AttrMode = 'url', optional = false) =>
+    out.push({ attr, role, kind, mode, optional });
 
   switch (el.tagName) {
     case 'base':
@@ -137,8 +152,8 @@ function attrSites(el: Element): AttrSite[] {
       add('xlink:href', 'asset', 'image');
       break;
   }
-  for (const a of LAZY_URL_ATTRS) add(a, 'asset', null, 'lazy');
-  for (const a of LAZY_SRCSET_ATTRS) add(a, 'asset', 'image', 'srcset');
+  for (const a of LAZY_URL_ATTRS) add(a, 'asset', null, 'lazy', true);
+  for (const a of LAZY_SRCSET_ATTRS) add(a, 'asset', 'image', 'srcset', true);
   add('style', 'asset', null, 'style');
   return out.filter((s) => el.attrs.some((a) => attrKey(a) === s.attr));
 }
@@ -161,13 +176,13 @@ function cssVisit(
   tag: string,
   attr: string | null,
 ): string | undefined {
-  const r = visit({ raw, role: 'asset', kindHint: src === 'css-import' ? 'css' : null, source, tag, attr });
+  const r = visit({ raw, role: 'asset', kindHint: src === 'css-import' ? 'css' : null, source, tag, attr, optional: false });
   return r === null ? undefined : r;
 }
 
 /** Returns the new attribute value, null to remove the attribute, or undefined for no change. */
 function rewriteAttrValue(value: string, site: AttrSite, tag: string, visit: HtmlVisitor): string | null | undefined {
-  const where = { tag, attr: site.attr };
+  const where = { tag, attr: site.attr, optional: site.optional };
   switch (site.mode) {
     case 'url': {
       const r = visit({ raw: value, role: site.role, kindHint: site.kind, source: 'html-attr', ...where });
@@ -177,11 +192,10 @@ function rewriteAttrValue(value: string, site: AttrSite, tag: string, visit: Htm
     case 'lazy': {
       const m = /^\s*url\(\s*(['"]?)(.*?)\1\s*\)\s*$/i.exec(value);
       const raw = m ? m[2]! : value.trim();
-      // lazy attributes often hold flags ("true") — only treat path-like values as URLs
-      if (!raw || /\s/.test(raw) || !/[./]/.test(raw)) return undefined;
+      if (!looksLikeUrl(raw)) return undefined;
       const r = visit({ raw, role: 'asset', kindHint: site.kind, source: 'html-attr', ...where });
       if (typeof r !== 'string' || r === raw) return undefined;
-      return m ? `url('${r}')` : r;
+      return m ? `url("${r}")` : r;
     }
     case 'srcset': {
       const candidates = parseSrcset(value);
@@ -203,11 +217,16 @@ function rewriteAttrValue(value: string, site: AttrSite, tag: string, visit: Htm
   }
 }
 
-function handleElement(html: string, el: Element, visit: HtmlVisitor, edits: Edit[]): void {
+function handleElement(html: string, el: Element, visit: HtmlVisitor, edits: Edit[], state: WalkState): void {
   for (const site of attrSites(el)) {
     const a = el.attrs.find((x) => attrKey(x) === site.attr);
     const loc = el.sourceCodeLocation?.attrs?.[site.attr];
-    if (!a || !loc) continue;
+    if (!a || !loc || state.seen.has(loc.startOffset)) continue;
+    state.seen.add(loc.startOffset);
+    if (site.role === 'base') {
+      if (state.baseSeen) continue; // browsers honor only the first base[href]
+      state.baseSeen = true;
+    }
     const next = rewriteAttrValue(a.value, site, el.tagName, visit);
     if (next === undefined) continue;
     edits.push({
@@ -219,29 +238,32 @@ function handleElement(html: string, el: Element, visit: HtmlVisitor, edits: Edi
 
   if (el.tagName === 'style') {
     for (const child of el.childNodes) {
-      if (child.nodeName !== '#text') continue;
-      const text = child as TextNode;
-      const loc = text.sourceCodeLocation;
-      if (!loc) continue;
-      const next = walkCss(text.value, (raw, src) => cssVisit(visit, raw, src, 'style-block', 'style', null));
-      if (next !== text.value) edits.push({ start: loc.startOffset, end: loc.endOffset, text: next });
+      const loc = child.nodeName === '#text' ? child.sourceCodeLocation : undefined;
+      if (!loc || state.seen.has(loc.startOffset)) continue;
+      state.seen.add(loc.startOffset);
+      // use the raw source (not parse5's normalized text) so CRLF and other bytes survive
+      const css = html.slice(loc.startOffset, loc.endOffset);
+      const next = walkCss(css, (raw, src) => cssVisit(visit, raw, src, 'style-block', 'style', null));
+      if (next !== css) edits.push({ start: loc.startOffset, end: loc.endOffset, text: next });
     }
   }
 }
 
 /**
  * Single HTML URL walker used by both extraction and rewriting. Visits URL-bearing attributes, srcset
- * candidates, inline styles and <style> blocks in document order (so <base> is seen first).
- * Rewrites by splicing the original string: untouched markup stays byte-identical.
+ * candidates, inline styles and <style> blocks in document order (so the first <base> is seen first).
+ * Rewrites by splicing the original string: untouched markup stays byte-identical. Each source offset is
+ * visited once, and overlapping edits are dropped, so parse5's element reconstruction cannot corrupt output.
  */
 export function walkHtml(html: string, visit: HtmlVisitor): string {
   const doc = parse(html, { sourceCodeLocationInfo: true, scriptingEnabled: false });
   const edits: Edit[] = [];
+  const state: WalkState = { seen: new Set(), baseSeen: false };
 
   const walk = (parent: ParentNode): void => {
     for (const node of parent.childNodes) {
       if (!isElement(node)) continue;
-      handleElement(html, node, visit, edits);
+      handleElement(html, node, visit, edits, state);
       if (node.tagName === 'template') walk((node as Template).content);
       walk(node);
     }
@@ -251,6 +273,11 @@ export function walkHtml(html: string, visit: HtmlVisitor): string {
   if (edits.length === 0) return html;
   edits.sort((a, b) => b.start - a.start);
   let out = html;
-  for (const e of edits) out = out.slice(0, e.start) + e.text + out.slice(e.end);
+  let lastStart = Number.POSITIVE_INFINITY;
+  for (const e of edits) {
+    if (e.end > lastStart) continue; // overlaps an edit already applied
+    out = out.slice(0, e.start) + e.text + out.slice(e.end);
+    lastStart = e.start;
+  }
   return out;
 }

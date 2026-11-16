@@ -67,4 +67,43 @@ describe('rewriteHtml', () => {
     const html = '<p   class=x>hi</p><a href="#top">t</a><a href=about.html>a</a>';
     expect(rw(html)).toBe(html);
   });
+
+  it('does not corrupt markup when parse5 reconstructs formatting elements', () => {
+    expect(rw('<p><a href="/html/about.html">About</p><p>next</p>')).toBe('<p><a href="about.html">About</p><p>next</p>');
+    expect(rw('<p><a href="/missing.html">M</p><p>n</p>')).toBe('<p><a href="https://x.com/missing.html">M</p><p>n</p>');
+    expect(rw('<p><b style="background:url(/html/assets/img/hero.jpg)">1</p><p>2</p>')).toBe(
+      '<p><b style="background:url(&quot;assets/img/hero.jpg&quot;)">1</p><p>2</p>',
+    );
+  });
+
+  it('rewrites lazy attributes only to downloaded files', () => {
+    expect(rw('<div data-bg="/html/missing-bg.jpg"></div>')).toBe('<div data-bg="/html/missing-bg.jpg"></div>');
+    expect(rw('<div data-bg="url(/html/assets/img/hero.jpg)"></div>')).toBe(
+      '<div data-bg="url(&quot;assets/img/hero.jpg&quot;)"></div>',
+    );
+    expect(rw('<div data-bg="rgba(0,0,0,.5)" data-lazy="1.5"></div>')).toBe('<div data-bg="rgba(0,0,0,.5)" data-lazy="1.5"></div>');
+  });
+
+  it('keeps <base> with a relative href when its directory is local', () => {
+    const resolveLocalDir = (u: string) => (u === 'https://x.com/html/' ? '' : undefined);
+    expect(
+      rewriteHtml('<head><base href="/html/"></head><body><a href="about.html">A</a></body>', PAGE, 'index.html', resolve, {
+        resolveLocalDir,
+      }),
+    ).toBe('<head><base href="./"></head><body><a href="about.html">A</a></body>');
+    expect(
+      rewriteHtml(
+        '<head><base href="/html/"></head><body><img src="assets/img/a.png"></body>',
+        'https://x.com/html/blog/post.html',
+        'blog/post.html',
+        resolve,
+        { resolveLocalDir },
+      ),
+    ).toBe('<head><base href="../"></head><body><img src="assets/img/a.png"></body>');
+  });
+
+  it('preserves CRLF inside a rewritten <style> block', () => {
+    const out = rw('<style>.a{color:red}\r\n.h{background:url(/html/assets/img/hero.jpg)}</style>');
+    expect(out).toBe('<style>.a{color:red}\r\n.h{background:url("assets/img/hero.jpg")}</style>');
+  });
 });
