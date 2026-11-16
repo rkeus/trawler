@@ -83,7 +83,7 @@ export function createFetcher(opts: FetcherOptions): Fetcher {
           throw new FetchError(`Bot protection challenge (HTTP ${res.status})`, url, 'challenge', res.status);
         }
         if (res.ok) {
-          return { url, finalUrl: res.url || url, status: res.status, contentType: hdrs['content-type'], headers: hdrs, body };
+          return { url, finalUrl: res.url || url, status: res.status, contentType: hdrs['content-type'], headers: hdrs, body, size: body.length };
         }
         const e = new FetchError(`HTTP ${res.status}`, url, 'http', res.status);
         const throttled = res.status === 429 || res.status === 503;
