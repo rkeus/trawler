@@ -10,7 +10,7 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "build:main": "node scripts/build-main.mjs",
-    "start": "npm run build:main && electron .",
+    "start": "npm run build:main && node scripts/start.mjs",
     "test:electron": "npm run build:main && vitest run -c vitest.electron.config.ts"
   },
   "dependencies": {
