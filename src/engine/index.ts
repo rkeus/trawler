@@ -7,14 +7,16 @@ export { isBotChallenge } from './challenge';
 export { createFetcher, backoffMs, parseRetryAfter, type FetcherOptions } from './fetcher';
 export { BlobStore } from './blob-store';
 export { loadRobots } from './robots-loader';
-export { crawl, SeedError, type CrawlOptions, type CrawlRecord, type CrawlResult } from './crawl';
+export { crawl, resolveSeed, SeedError, type CrawlOptions, type CrawlRecord, type CrawlResult, type ResolvedSeed } from './crawl';
 export { rewriteJsAbsoluteUrls } from './rewrite-js';
-export { finalize, type FinalizeOptions, type FinalizeResult } from './finalize';
+export { finalize, type FinalizeOptions, type FinalizeResult, type FinalizeProgress } from './finalize';
 export {
   inspectOutputDir,
   prepareOutputDir,
   isInside,
   OutputDirError,
+  removeStaleFiles,
+  mergeFileLists,
   type FolderState,
   type ConcreteFolderPolicy,
 } from './output-dir';
