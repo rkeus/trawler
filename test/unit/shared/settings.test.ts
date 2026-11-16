@@ -108,6 +108,15 @@ describe('resolveSettings', () => {
     settings.detection.weights.emptyMount = 9;
     expect(DEFAULT_SETTINGS.detection.weights.emptyMount).toBe(0.3);
   });
+
+  it('has runtime settings for rendering and streaming', () => {
+    expect(DEFAULT_SETTINGS).toMatchObject({ renderConcurrency: 2, idleTimeoutMs: 30000, memoryBodyLimitBytes: 8388608 });
+    const { settings, warnings } = resolveSettings({ renderConcurrency: 99, idleTimeoutMs: 10, memoryBodyLimitBytes: 1 });
+    expect(settings.renderConcurrency).toBe(8);
+    expect(settings.idleTimeoutMs).toBe(1000);
+    expect(settings.memoryBodyLimitBytes).toBe(262144);
+    expect(warnings).toHaveLength(3);
+  });
 });
 
 describe('compileExcludePatterns', () => {

@@ -13,6 +13,12 @@ export interface Settings {
   requestDelayMs: number;
   renderTimeoutMs: number;
   networkIdleMs: number;
+  /** hidden browser windows rendering pages at the same time (JS mode) */
+  renderConcurrency: number;
+  /** max silence while a response body is streaming */
+  idleTimeoutMs: number;
+  /** bodies larger than this stream to disk instead of memory */
+  memoryBodyLimitBytes: number;
   autoScroll: boolean;
   analyzeRenderPages: number;
   /** '' means: use Chromium's default user agent */
@@ -41,6 +47,9 @@ const DEFAULTS: Settings = {
   requestDelayMs: 0,
   renderTimeoutMs: 15000,
   networkIdleMs: 1000,
+  renderConcurrency: 2,
+  idleTimeoutMs: 30000,
+  memoryBodyLimitBytes: 8388608,
   autoScroll: true,
   analyzeRenderPages: 5,
   userAgent: '',
@@ -82,6 +91,9 @@ type IntKey =
   | 'requestDelayMs'
   | 'renderTimeoutMs'
   | 'networkIdleMs'
+  | 'renderConcurrency'
+  | 'idleTimeoutMs'
+  | 'memoryBodyLimitBytes'
   | 'analyzeRenderPages'
   | 'historySize';
 
@@ -94,6 +106,9 @@ const INT_RANGES: Record<IntKey, [number, number]> = {
   requestDelayMs: [0, 60000],
   renderTimeoutMs: [1000, 300000],
   networkIdleMs: [100, 30000],
+  renderConcurrency: [1, 8],
+  idleTimeoutMs: [1000, 600000],
+  memoryBodyLimitBytes: [262144, 536870912],
   analyzeRenderPages: [1, 100],
   historySize: [0, 500],
 };
