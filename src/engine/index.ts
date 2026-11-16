@@ -6,6 +6,7 @@ export { AdaptivePool, type PoolOptions } from './pool';
 export { isBotChallenge, isChallengeInterstitial, looksLikeChallengePage, withChallengeSolver } from './challenge';
 export { detectArchitecture, type ArchitectureResult } from './detect-architecture';
 export { createFetcher, backoffMs, parseRetryAfter, type FetcherOptions } from './fetcher';
+export { FetchCache } from './fetch-cache';
 export { BlobStore, type BlobWriter } from './blob-store';
 export { loadRobots } from './robots-loader';
 export { crawl, resolveSeed, SeedError, type CrawlOptions, type CrawlRecord, type CrawlResult, type ResolvedSeed } from './crawl';
