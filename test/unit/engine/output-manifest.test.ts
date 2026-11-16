@@ -59,11 +59,22 @@ describe('output dir', () => {
     await fs.writeFile(path.join(dir, 'a', 'old.html'), 'old');
     await fs.writeFile(path.join(dir, 'a', 'Kept.html'), 'new');
     await fs.writeFile(path.join(dir, 'mine.txt'), 'keep me');
-    const removed = await removeStaleFiles(dir, manifest(['a/old.html', 'a/kept.html', '../outside.txt']), ['a/Kept.html']);
+    const { removed, failed } = await removeStaleFiles(dir, manifest(['a/old.html', 'a/kept.html', '../outside.txt']), ['a/Kept.html']);
     expect(removed).toEqual(['a/old.html']);
+    expect(failed).toEqual([]);
     await expect(fs.stat(path.join(dir, 'a', 'old.html'))).rejects.toBeDefined();
     expect(await fs.readFile(path.join(dir, 'a', 'Kept.html'), 'utf8')).toBe('new');
     expect(await fs.readFile(path.join(dir, 'mine.txt'), 'utf8')).toBe('keep me');
+  });
+
+  it('removeStaleFiles reports files it cannot remove instead of throwing', async () => {
+    const dir = await tmp();
+    await fs.mkdir(path.join(dir, 'stale'), { recursive: true });
+    await fs.writeFile(path.join(dir, 'stale', 'user.txt'), 'mine');
+    const { removed, failed } = await removeStaleFiles(dir, manifest(['stale']), []);
+    expect(removed).toEqual([]);
+    expect(failed).toEqual(['stale']);
+    expect(await fs.readFile(path.join(dir, 'stale', 'user.txt'), 'utf8')).toBe('mine');
   });
 
   it('mergeFileLists keeps previous files tracked unless replaced', () => {

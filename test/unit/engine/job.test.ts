@@ -175,6 +175,18 @@ describe('runJob (download)', () => {
     expect(result.warnings.join(' ')).toContain('Verification could not run');
     await expect(fs.stat(path.join(out, '_trawler', 'report.json'))).resolves.toBeDefined();
   });
+
+  it('finishes with a warning when a stale file cannot be removed', async () => {
+    const out = await tmp();
+    await fs.mkdir(path.join(out, 'stale'), { recursive: true });
+    await fs.writeFile(path.join(out, 'stale', 'user.txt'), 'mine');
+    await writeManifest(out, previousManifest(['stale']));
+    const { result } = await go({ outputDir: out, folderPolicy: 'overwrite' });
+    expect(result.status).toBe('done_with_errors');
+    expect(result.warnings.join(' ')).toContain('Could not remove 1 file');
+    const manifest = JSON.parse(await fs.readFile(path.join(out, '_trawler', 'manifest.json'), 'utf8'));
+    expect(manifest.files.map((f: { path: string }) => f.path)).toContain('stale');
+  });
 });
 
 describe('runJob (analyze)', () => {

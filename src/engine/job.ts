@@ -184,7 +184,15 @@ export async function runJob(req: JobRequest, ports: JobPorts, control: JobContr
 
     let files = fin.files;
     if (status !== 'cancelled' && policy === 'overwrite' && previous) {
-      await removeStaleFiles(outputDir!, previous, fin.files.map((f) => f.path));
+      const { failed } = await removeStaleFiles(outputDir!, previous, fin.files.map((f) => f.path));
+      if (failed.length > 0) {
+        const shown = failed.slice(0, 5).join(', ');
+        warnings.push(
+          `Could not remove ${failed.length} file(s) of the previous mirror: ${shown}${failed.length > 5 ? ', ...' : ''}`,
+        );
+        // what is still on disk stays tracked
+        files = mergeFileLists({ ...previous, files: previous.files.filter((f) => failed.includes(f.path)) }, fin.files);
+      }
     } else {
       files = mergeFileLists(previous, fin.files);
     }
@@ -239,6 +247,7 @@ export async function runJob(req: JobRequest, ports: JobPorts, control: JobContr
         warnings: [...warnings, message],
         files: mergeFileLists(previous, placed.files),
       }).catch(() => undefined);
+      await writeReport(outputDir, { status, warnings: [...warnings, message] }).catch(() => undefined);
     }
     return {
       kind: req.kind,

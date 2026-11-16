@@ -19,6 +19,7 @@ export {
   mergeFileLists,
   type FolderState,
   type ConcreteFolderPolicy,
+  type StaleRemoval,
 } from './output-dir';
 export {
   collectErrors,

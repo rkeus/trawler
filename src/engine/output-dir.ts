@@ -48,21 +48,33 @@ export async function prepareOutputDir(dir: string, policy: ConcreteFolderPolicy
   return readManifest(dir);
 }
 
+export interface StaleRemoval {
+  removed: string[];
+  /** paths that could not be removed (locked, or now a directory); they stay tracked */
+  failed: string[];
+}
+
 /**
  * overwrite policy, after a successful download: deletes files of the previous Trawler mirror that the
- * new mirror did not reuse. Never touches unknown files or anything outside `dir`. Returns removed paths.
+ * new mirror did not reuse. Never touches unknown files or anything outside `dir`, and never throws:
+ * files that cannot be removed are reported in `failed`.
  */
-export async function removeStaleFiles(dir: string, previous: Manifest, keep: Iterable<string>): Promise<string[]> {
+export async function removeStaleFiles(dir: string, previous: Manifest, keep: Iterable<string>): Promise<StaleRemoval> {
   const kept = new Set([...keep].map((p) => p.toLowerCase()));
   const removed: string[] = [];
+  const failed: string[] = [];
   for (const file of previous.files) {
     if (typeof file.path !== 'string' || kept.has(file.path.toLowerCase())) continue;
     const target = path.resolve(dir, ...file.path.split('/'));
     if (!isInside(dir, target)) continue;
-    await fs.rm(target, { force: true });
-    removed.push(file.path);
+    try {
+      await fs.rm(target, { force: true });
+      removed.push(file.path);
+    } catch {
+      failed.push(file.path);
+    }
   }
-  return removed;
+  return { removed, failed };
 }
 
 /** Files of a previous mirror that stay in the folder (merge, or a cancelled/failed run) remain tracked. */
