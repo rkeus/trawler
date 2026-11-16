@@ -77,6 +77,8 @@ async function captureOnce(ses: Session, url: string, o: CaptureOptions, opts: C
     wc.on('will-navigate', (event) => {
       if (new URL(event.url).origin !== origin) event.preventDefault();
     });
+    // Network.enable never answers on a webContents that has not navigated yet (Electron 45): commit about:blank first
+    await wc.loadURL('about:blank');
     wc.debugger.attach('1.3');
     wc.debugger.on('message', (_event, method, params) => recorder.handle(method, params));
     await wc.debugger.sendCommand('Network.enable', {
