@@ -60,7 +60,7 @@ describe('createFetcher', () => {
     const err = await mk({ onThrottle }).fetch(`${server.url}/busy`).catch((e: unknown) => e);
     expect((err as FetchError).status).toBe(503);
     expect(hits.get('/busy')).toBe(3);
-    expect(onThrottle).toHaveBeenCalledTimes(2);
+    expect(onThrottle).toHaveBeenCalledTimes(3);
   });
 
   it('times out', async () => {

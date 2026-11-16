@@ -86,13 +86,12 @@ export function createFetcher(opts: FetcherOptions): Fetcher {
           return { url, finalUrl: res.url || url, status: res.status, contentType: hdrs['content-type'], headers: hdrs, body };
         }
         const e = new FetchError(`HTTP ${res.status}`, url, 'http', res.status);
+        const throttled = res.status === 429 || res.status === 503;
+        if (throttled) opts.onThrottle?.(); // also on the last attempt: the server is overloaded either way
         if (!RETRYABLE.has(res.status) || attempt >= opts.retries) throw e;
-        if (res.status === 429 || res.status === 503) {
-          opts.onThrottle?.();
-          wait = Math.min(parseRetryAfter(hdrs['retry-after']) ?? backoffMs(attempt + 1), opts.maxRetryAfterMs ?? 30000);
-        } else {
-          wait = backoffMs(attempt + 1);
-        }
+        wait = throttled
+          ? Math.min(parseRetryAfter(hdrs['retry-after']) ?? backoffMs(attempt + 1), opts.maxRetryAfterMs ?? 30000)
+          : backoffMs(attempt + 1);
       }
     },
   };
