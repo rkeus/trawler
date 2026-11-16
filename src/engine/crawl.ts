@@ -336,7 +336,9 @@ export async function crawl(opts: CrawlOptions): Promise<CrawlResult> {
   /** Adopts a response the browser already loaded, so it is not fetched again. */
   async function adopt(r: CapturedResponse, referrer: string): Promise<void> {
     if (halted() || r.status < 200 || r.status >= 300) return;
-    if (r.body.length > settings.memoryBodyLimitBytes) return; // large media: fetched with streaming if referenced
+    const body = r.body;
+    // omitted or large bodies are not adopted: fetched with streaming if referenced
+    if (body === undefined || body.length > settings.memoryBodyLimitBytes) return;
     const n = normalizeUrl(r.url);
     if (!n) return;
     const url = canon(n);
@@ -358,13 +360,13 @@ export async function crawl(opts: CrawlOptions): Promise<CrawlResult> {
       status: r.status,
       contentType: r.contentType,
       headers: {},
-      body: r.body,
-      size: r.body.length,
+      body,
+      size: body.length,
     };
     accept(rec, res, url);
     await store(rec, res, kind === 'css');
     if (kind === 'css') {
-      for (const ref of extractCssRefs(decodeBody(r.body, r.contentType).text, url)) enqueueAsset(ref.url, ref.kind, url);
+      for (const ref of extractCssRefs(decodeBody(body, r.contentType).text, url)) enqueueAsset(ref.url, ref.kind, url);
     }
     counters.assetsDone++;
     progress();
@@ -379,8 +381,10 @@ export async function crawl(opts: CrawlOptions): Promise<CrawlResult> {
     }
     if (cap.status >= 400) throw new FetchError(`HTTP ${cap.status}`, rec.url, 'http', cap.status);
     if (cap.contentType && !isHtmlContentType(cap.contentType)) {
-      // the link serves a file (PDF, image…), not a page: fetch it as an asset
-      await fetchPageStatic(rec);
+      // the link serves a file (PDF, image…), not a page: fetch it through the fetch pool (not a render slot),
+      // and give the render back to the analyze budget
+      if (opts.kind === 'analyze') rendersStarted--;
+      tasks.push(pool.run(() => fetchFileFallback(rec), halt.signal));
       return;
     }
     // raw served bytes when available; otherwise the decoded text, stored as UTF-8 and declared as such
@@ -403,6 +407,15 @@ export async function crawl(opts: CrawlOptions): Promise<CrawlResult> {
     const live = extractHtmlRefs(cap.renderedHtml, rec.finalUrl);
     for (const a of [...served.assets, ...live.assets]) enqueueAsset(a.url, a.kind, rec.finalUrl);
     for (const p of [...served.pages, ...live.pages]) enqueuePage(p.url, rec.depth + 1, rec.finalUrl);
+  }
+
+  async function fetchFileFallback(rec: CrawlRecord): Promise<void> {
+    try {
+      if (halted()) throw cancelled(rec.url);
+      await fetchPageStatic(rec);
+    } catch (err) {
+      fail(rec, err);
+    }
   }
 
   async function fetchPageStatic(rec: CrawlRecord, prefetched?: FetchedResource): Promise<void> {

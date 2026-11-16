@@ -170,6 +170,44 @@ describe('crawl (JS mode)', () => {
     expect(spa.requests.slice(before)).toContain('/app/assets/index-AbCdEf12.js');
   });
 
+  it('does not adopt a captured resource whose body was omitted', async () => {
+    const cap = fakeCapturer(() => ({
+      html: SPA_SHELL,
+      renderedHtml: spaRendered(),
+      resources: [
+        { url: `${spa.url}/app/assets/index-AbCdEf12.js`, status: 200, contentType: 'text/javascript', type: 'Script' },
+      ],
+    }));
+    const before = spa.requests.length;
+    const r = await run('download', cap);
+    expect(spa.requests.slice(before)).toContain('/app/assets/index-AbCdEf12.js');
+    expect(r.records.get(`${spa.url}/app/assets/index-AbCdEf12.js`)?.bytes).toBeGreaterThan(0);
+  });
+
+  it('still adopts an empty but real captured body', async () => {
+    const cap = fakeCapturer(() => ({
+      html: SPA_SHELL,
+      renderedHtml: spaRendered(),
+      resources: [
+        { url: `${spa.url}/app/assets/index-AbCdEf12.js`, status: 200, contentType: 'text/javascript', body: Buffer.alloc(0), type: 'Script' },
+      ],
+    }));
+    const before = spa.requests.length;
+    const r = await run('download', cap);
+    expect(spa.requests.slice(before)).not.toContain('/app/assets/index-AbCdEf12.js');
+    expect(r.records.get(`${spa.url}/app/assets/index-AbCdEf12.js`)?.fetched).toBe(true);
+  });
+
+  it('does not spend the analyze render budget on a link that turns out to be a file', async () => {
+    const cap = fakeCapturer((url) =>
+      url.endsWith('/app/report')
+        ? { html: '', renderedHtml: '', contentType: 'application/pdf' }
+        : { html: SPA_SHELL, renderedHtml: `<a href="/app/report">r</a>${spaRendered()}` },
+    );
+    await run('analyze', cap, { analyzeRenderPages: 3 });
+    expect(cap.calls).toEqual([`${spa.url}/app/`, `${spa.url}/app/report`, `${spa.url}/app/about`]);
+  });
+
   it('aliases the requested URL of a redirected captured resource', async () => {
     const cap = fakeCapturer(() => ({
       html: SPA_SHELL,

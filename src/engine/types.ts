@@ -101,8 +101,8 @@ export interface CapturedResponse {
   status: number;
   /** text bodies are delivered as UTF-8; the capturer rewrites any charset parameter to utf-8 */
   contentType?: string;
-  /** the capturer omits bodies above memoryBodyLimitBytes (the crawl then fetches them with streaming) */
-  body: Buffer;
+  /** undefined = omitted (above memoryBodyLimitBytes, or unavailable): the crawl fetches it with streaming. An empty Buffer is a real empty body. */
+  body?: Buffer;
   /** browser resource type, e.g. Document, Stylesheet, Script, Image, Font, XHR, Fetch */
   type: string;
 }
