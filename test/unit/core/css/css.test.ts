@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { walkCss } from '../../../../src/core/css/walk-css';
+import { walkCss, unescapeCss } from '../../../../src/core/css/walk-css';
 import { extractCssRefs } from '../../../../src/core/css/extract';
 
 const CSS_URL = 'https://x.com/html/assets/css/style.css';
@@ -29,6 +29,20 @@ describe('walkCss', () => {
       return undefined;
     });
     expect(seen).toEqual(['css-import:a.css', 'css-url:c.png']);
+  });
+
+  it('escapes quotes and backslashes in rewritten strings', () => {
+    expect(walkCss('a{background:url(x.png)}', () => 'c"d.png')).toContain(String.raw`url("c\"d.png")`);
+    expect(walkCss(`@import 'a.css';`, () => "it's.css")).toContain(`@import "it's.css"`);
+  });
+
+  it('passes unescaped values to the visitor', () => {
+    const seen: string[] = [];
+    walkCss(String.raw`a{background:url(foo\(1\).png)} b{background:url("x\"y.png")}`, (raw) => {
+      seen.push(raw);
+      return undefined;
+    });
+    expect(seen).toEqual(['foo(1).png', 'x"y.png']);
   });
 });
 
@@ -75,5 +89,20 @@ describe('extractCssRefs', () => {
 
   it('survives broken CSS', () => {
     expect(urls('a{background:url(x.png)')).toEqual(['https://x.com/html/assets/css/x.png']);
+  });
+
+  it('decodes CSS escapes before resolving', () => {
+    expect(urls(String.raw`a{background:url(foo\(1\).png)}`)).toEqual(['https://x.com/html/assets/css/foo(1).png']);
+    expect(urls(String.raw`a{background:url("x\"y.png")}`)).toEqual(['https://x.com/html/assets/css/x%22y.png']);
+  });
+});
+
+describe('unescapeCss', () => {
+  it('decodes hex, character and newline escapes', () => {
+    expect(unescapeCss(String.raw`\41 b`)).toBe('Ab');
+    expect(unescapeCss(String.raw`\28`)).toBe('(');
+    expect(unescapeCss(String.raw`a\.b`)).toBe('a.b');
+    expect(unescapeCss('a\\\nb')).toBe('ab');
+    expect(unescapeCss('plain')).toBe('plain');
   });
 });
