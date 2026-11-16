@@ -3,6 +3,9 @@ import { startServer, type TestServer } from '../../helpers/http-server';
 import { createFetcher, backoffMs, parseRetryAfter } from '../../../src/engine/fetcher';
 import { isBotChallenge } from '../../../src/engine/challenge';
 import { FetchError } from '../../../src/engine/types';
+import { BlobStore } from '../../../src/engine/blob-store';
+import { makeTmpDir } from '../../helpers/tmp';
+import path from 'node:path';
 
 let server: TestServer;
 const hits = new Map<string, number>();
@@ -22,6 +25,24 @@ beforeAll(async () => {
     if (p === '/slow') return void setTimeout(() => res.writeHead(200).end('late'), 300);
     if (p === '/challenge')
       return void res.writeHead(403, { 'content-type': 'text/html' }).end('<html><title>Just a moment...</title></html>');
+    if (p === '/stall') {
+      res.writeHead(200, { 'content-type': 'text/plain' });
+      res.write('abc');
+      return void setTimeout(() => res.end('def'), 1000);
+    }
+    if (p === '/steady') {
+      res.writeHead(200, { 'content-type': 'text/plain' });
+      let i = 0;
+      const t = setInterval(() => {
+        res.write('x'.repeat(10));
+        if (++i === 8) {
+          clearInterval(t);
+          res.end();
+        }
+      }, 50);
+      return;
+    }
+    if (p === '/big') return void res.writeHead(200, { 'content-type': 'video/mp4' }).end(Buffer.alloc(65536, 7));
     res.writeHead(500).end();
   });
 });
@@ -84,6 +105,28 @@ describe('createFetcher', () => {
   it('sends the configured user agent', async () => {
     await mk({ userAgent: 'TrawlerTest/1' }).fetch(`${server.url}/ok`);
     expect(lastUa).toBe('TrawlerTest/1');
+  });
+
+  it('times out when the body stalls (idle timeout)', async () => {
+    const err = await mk({ idleTimeoutMs: 100, retries: 0 }).fetch(`${server.url}/stall`).catch((e: unknown) => e);
+    expect((err as FetchError).reason).toBe('timeout');
+    expect((err as FetchError).message).toContain('No data');
+  });
+
+  it('keeps reading a slow but steady body past the header timeout', async () => {
+    const r = await mk({ timeoutMs: 200, idleTimeoutMs: 150, retries: 0 }).fetch(`${server.url}/steady`);
+    expect(r.body.length).toBe(80);
+    expect(r.size).toBe(80);
+  });
+
+  it('spills large bodies to the blob store', async () => {
+    const store = new BlobStore(path.join(await makeTmpDir('spill'), 'blobs'));
+    await store.init();
+    const r = await mk({ memoryLimitBytes: 1024, spillTo: () => store }).fetch(`${server.url}/big`);
+    expect(r.body.length).toBe(0);
+    expect(r.size).toBe(65536);
+    expect(r.spilledBlobId).toBeDefined();
+    expect((await store.get(r.spilledBlobId!)).equals(Buffer.alloc(65536, 7))).toBe(true);
   });
 });
 

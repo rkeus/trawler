@@ -1,10 +1,14 @@
+import type { BlobStore, BlobWriter } from './blob-store';
 import { isBotChallenge } from './challenge';
 import { sleep as defaultSleep } from './sleep';
 import { FetchError, type FetchImpl, type FetchedResource, type Fetcher } from './types';
 
 export interface FetcherOptions {
   fetchImpl: FetchImpl;
+  /** max wait for response headers */
   timeoutMs: number;
+  /** max silence while the body streams; default timeoutMs */
+  idleTimeoutMs?: number;
   /** extra attempts after the first one */
   retries: number;
   signal: AbortSignal;
@@ -14,6 +18,10 @@ export interface FetcherOptions {
   onThrottle?: () => void;
   /** cap for honoring Retry-After, default 30000 */
   maxRetryAfterMs?: number;
+  /** successful bodies larger than memoryLimitBytes stream to this store (when it returns one) */
+  spillTo?: () => BlobStore | undefined;
+  /** default 8 MiB */
+  memoryLimitBytes?: number;
   /** injectable for tests */
   sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
 }
@@ -41,10 +49,97 @@ function headersToRecord(headers: Headers): Record<string, string> {
   return out;
 }
 
+/** Rejects as soon as `signal` aborts, even if the underlying promise ignores the signal. */
+function raceAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(signal.reason);
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = (): void => reject(signal.reason);
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      (v) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(v);
+      },
+      (e: unknown) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(e);
+      },
+    );
+  });
+}
+
+class TimeoutReason extends Error {}
+
+interface Body {
+  body: Buffer;
+  size: number;
+  spilledBlobId?: string;
+}
+
+async function readBody(
+  res: Response,
+  ctl: AbortController,
+  signal: AbortSignal,
+  idleMs: number,
+  spill: BlobStore | undefined,
+  limit: number,
+): Promise<Body> {
+  if (!res.body) return { body: Buffer.alloc(0), size: 0 };
+  const reader = res.body.getReader();
+  const chunks: Buffer[] = [];
+  let size = 0;
+  let writer: BlobWriter | undefined;
+  let idle: ReturnType<typeof setTimeout> | undefined;
+  const arm = (): void => {
+    clearTimeout(idle);
+    idle = setTimeout(() => ctl.abort(new TimeoutReason(`No data for ${idleMs} ms`)), idleMs);
+  };
+  const spillNow = async (): Promise<void> => {
+    writer = spill!.createWriter();
+    for (const c of chunks) await writer.write(c);
+    chunks.length = 0;
+  };
+  try {
+    const declared = Number(res.headers.get('content-length'));
+    if (spill && Number.isFinite(declared) && declared > limit) await spillNow();
+    arm();
+    for (;;) {
+      const { done, value } = await raceAbort(reader.read(), signal);
+      if (done) break;
+      arm();
+      size += value.byteLength;
+      if (writer) await writer.write(value);
+      else {
+        chunks.push(Buffer.from(value));
+        if (spill && size > limit) await spillNow();
+      }
+    }
+    if (writer) return { body: Buffer.alloc(0), size, spilledBlobId: await writer.finish() };
+    return { body: Buffer.concat(chunks), size };
+  } catch (err) {
+    await writer?.abort();
+    await reader.cancel().catch(() => undefined);
+    throw err;
+  } finally {
+    clearTimeout(idle);
+  }
+}
+
 export function createFetcher(opts: FetcherOptions): Fetcher {
   const sleep = opts.sleep ?? defaultSleep;
   const headers: Record<string, string> = opts.userAgent ? { 'user-agent': opts.userAgent } : {};
+  const idleMs = opts.idleTimeoutMs ?? opts.timeoutMs;
+  const limit = opts.memoryLimitBytes ?? 8 * 1024 * 1024;
   const aborted = (url: string): FetchError => new FetchError('Cancelled', url, 'aborted');
+
+  /** Classifies a failure of one attempt: cancel, timeout (header or idle) or network. */
+  const classify = (url: string, ctl: AbortController, err: unknown): FetchError => {
+    if (opts.signal.aborted) return aborted(url);
+    if (ctl.signal.aborted && ctl.signal.reason instanceof TimeoutReason) {
+      return new FetchError(`Timed out: ${ctl.signal.reason.message}`, url, 'timeout');
+    }
+    return new FetchError(`Network error: ${(err as Error)?.message ?? String(err)}`, url, 'network');
+  };
 
   return {
     async fetch(url: string): Promise<FetchedResource> {
@@ -59,31 +154,41 @@ export function createFetcher(opts: FetcherOptions): Fetcher {
         }
         if (opts.signal.aborted) throw aborted(url);
 
-        const signal = AbortSignal.any([opts.signal, AbortSignal.timeout(opts.timeoutMs)]);
+        const ctl = new AbortController();
+        const signal = AbortSignal.any([opts.signal, ctl.signal]);
+        const headerTimer = setTimeout(
+          () => ctl.abort(new TimeoutReason(`No response within ${opts.timeoutMs} ms`)),
+          opts.timeoutMs,
+        );
         let res: Response;
-        let body: Buffer;
+        let body: Body;
         try {
-          res = await opts.fetchImpl(url, { headers, redirect: 'follow', signal });
-          body = Buffer.from(await res.arrayBuffer());
+          res = await raceAbort(opts.fetchImpl(url, { headers, redirect: 'follow', signal }), signal);
+          clearTimeout(headerTimer);
+          body = await readBody(res, ctl, signal, idleMs, res.ok ? opts.spillTo?.() : undefined, limit);
         } catch (err) {
-          if (opts.signal.aborted) throw aborted(url);
-          const timedOut = signal.aborted;
-          const e = new FetchError(
-            timedOut ? `Timed out after ${opts.timeoutMs} ms` : `Network error: ${(err as Error).message}`,
-            url,
-            timedOut ? 'timeout' : 'network',
-          );
-          if (attempt >= opts.retries) throw e;
+          clearTimeout(headerTimer);
+          const e = classify(url, ctl, err);
+          if (e.reason === 'aborted' || attempt >= opts.retries) throw e;
           wait = backoffMs(attempt + 1);
           continue;
         }
 
         const hdrs = headersToRecord(res.headers);
-        if (isBotChallenge(res.status, hdrs, body.subarray(0, 4096).toString('latin1'))) {
+        if (isBotChallenge(res.status, hdrs, body.body.subarray(0, 4096).toString('latin1'))) {
           throw new FetchError(`Bot protection challenge (HTTP ${res.status})`, url, 'challenge', res.status);
         }
         if (res.ok) {
-          return { url, finalUrl: res.url || url, status: res.status, contentType: hdrs['content-type'], headers: hdrs, body, size: body.length };
+          return {
+            url,
+            finalUrl: res.url || url,
+            status: res.status,
+            contentType: hdrs['content-type'],
+            headers: hdrs,
+            body: body.body,
+            size: body.size,
+            ...(body.spilledBlobId ? { spilledBlobId: body.spilledBlobId } : {}),
+          };
         }
         const e = new FetchError(`HTTP ${res.status}`, url, 'http', res.status);
         const throttled = res.status === 429 || res.status === 503;
