@@ -232,7 +232,7 @@ export async function runJob(req: JobRequest, ports: JobPorts, control: JobContr
       blobStore: blobStore!,
       settings,
       progress: placed,
-      ...(policy === 'overwrite' && previous
+      ...(policy === 'overwrite' && previous && !signal.aborted
         ? { previousPaths: new Set(previous.files.map((f) => f.path.toLowerCase())) }
         : {}),
     });

@@ -55,7 +55,12 @@ export async function writeManifest(outputDir: string, manifest: Manifest): Prom
 export async function readManifest(outputDir: string): Promise<Manifest | undefined> {
   try {
     const parsed = JSON.parse(await fs.readFile(path.join(dirOf(outputDir), 'manifest.json'), 'utf8')) as Manifest;
-    return Array.isArray(parsed.files) ? parsed : undefined;
+    if (!Array.isArray(parsed.files)) return undefined;
+    // a hand-edited or damaged manifest must not break overwrite/merge
+    parsed.files = parsed.files.filter(
+      (f): f is PlacedFile => typeof f === 'object' && f !== null && typeof (f as { path?: unknown }).path === 'string',
+    );
+    return parsed;
   } catch {
     return undefined;
   }

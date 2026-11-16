@@ -116,4 +116,14 @@ describe('manifest', () => {
     } as unknown as CrawlResult;
     expect(collectErrors(crawl)).toEqual([{ url: 'u1', referrers: ['p'], reason: 'HTTP 404', status: 404 }]);
   });
+
+  it('drops file entries without a string path when reading', async () => {
+    const dir = await tmp();
+    await fs.mkdir(path.join(dir, '_trawler'), { recursive: true });
+    await fs.writeFile(
+      path.join(dir, '_trawler', 'manifest.json'),
+      JSON.stringify({ ...manifest(['ok.html']), files: [{ path: 'ok.html' }, { url: 'x' }, null, { path: 7 }] }),
+    );
+    expect((await readManifest(dir))?.files.map((f) => f.path)).toEqual(['ok.html']);
+  });
 });
