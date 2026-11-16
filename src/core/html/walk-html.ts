@@ -1,7 +1,7 @@
 import { parse } from 'parse5';
 import type { AssetKind, RefSource } from '../../shared/types';
 import { walkCss, type CssRefSource } from '../css/walk-css';
-import { attrKey, getAttr, isElement, type Element, type ParentNode, type Template } from './dom';
+import { attrKey, getAttr, isElement, type Element, type ParentNode, type Template, type TextNode } from './dom';
 import { parseSrcset, stringifySrcset } from './srcset';
 
 export type HtmlRefRole = 'asset' | 'page' | 'base';
@@ -79,10 +79,18 @@ function preloadKind(as: string | undefined): AssetKind | null {
   }
 }
 
-/** Lazy attributes often hold colors, numbers or flags — accept only path-like values. */
+const HTML_NS = 'http://www.w3.org/1999/xhtml';
+
+/**
+ * Lazy attributes often hold colors, numbers or flags - accept only path-like values.
+ * An extension must start with a letter ("1.25" and "v1.25" are not files). Parentheses are allowed only
+ * in values that also have a "/" and an extension ("img/photo(1).jpg", but not "rgba(0,0,0,.5)").
+ */
 function looksLikeUrl(raw: string): boolean {
-  if (!raw || /\s/.test(raw) || raw.includes('(')) return false;
-  return raw.includes('/') || /\.[a-z0-9]{2,5}(?:[?#]|$)/i.test(raw);
+  if (!raw || /\s/.test(raw)) return false;
+  const hasExt = /\.[a-z][a-z0-9]{1,4}(?:[?#]|$)/i.test(raw);
+  if (raw.includes('(')) return raw.includes('/') && hasExt;
+  return raw.includes('/') || hasExt;
 }
 
 function attrSites(el: Element): AttrSite[] {
@@ -237,21 +245,38 @@ function handleElement(html: string, el: Element, visit: HtmlVisitor, edits: Edi
   }
 
   if (el.tagName === 'style') {
+    const htmlNs = el.namespaceURI === HTML_NS;
     for (const child of el.childNodes) {
-      const loc = child.nodeName === '#text' ? child.sourceCodeLocation : undefined;
+      if (child.nodeName !== '#text') continue;
+      const text = child as TextNode;
+      const loc = text.sourceCodeLocation;
       if (!loc || state.seen.has(loc.startOffset)) continue;
       state.seen.add(loc.startOffset);
-      // use the raw source (not parse5's normalized text) so CRLF and other bytes survive
-      const css = html.slice(loc.startOffset, loc.endOffset);
+      // HTML <style> is raw text: use the source slice so CRLF and other bytes survive.
+      // SVG/MathML <style> is entity-decoded by the parser: use the decoded value, re-escape on write.
+      const css = htmlNs ? html.slice(loc.startOffset, loc.endOffset) : text.value;
       const next = walkCss(css, (raw, src) => cssVisit(visit, raw, src, 'style-block', 'style', null));
-      if (next !== css) edits.push({ start: loc.startOffset, end: loc.endOffset, text: next });
+      if (next === css) continue;
+      const out = htmlNs ? next : next.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+      edits.push({ start: loc.startOffset, end: loc.endOffset, text: out });
     }
   }
 }
 
+/** First <base> with an href in document order (template content excluded, as in browsers). */
+function findFirstBase(parent: ParentNode): Element | undefined {
+  for (const node of parent.childNodes) {
+    if (!isElement(node)) continue;
+    if (node.tagName === 'base' && node.attrs.some((a) => a.name === 'href')) return node;
+    const inner = findFirstBase(node);
+    if (inner) return inner;
+  }
+  return undefined;
+}
+
 /**
  * Single HTML URL walker used by both extraction and rewriting. Visits URL-bearing attributes, srcset
- * candidates, inline styles and <style> blocks in document order (so the first <base> is seen first).
+ * candidates, inline styles and <style> blocks in document order, except that the first <base href> is visited before everything else.
  * Rewrites by splicing the original string: untouched markup stays byte-identical. Each source offset is
  * visited once, and overlapping edits are dropped, so parse5's element reconstruction cannot corrupt output.
  */
@@ -259,6 +284,10 @@ export function walkHtml(html: string, visit: HtmlVisitor): string {
   const doc = parse(html, { sourceCodeLocationInfo: true, scriptingEnabled: false });
   const edits: Edit[] = [];
   const state: WalkState = { seen: new Set(), baseSeen: false };
+  // Browsers apply the first <base href> to the whole document, including refs written before it:
+  // visit it first. Its offsets are then marked seen, so the main walk skips it.
+  const firstBase = findFirstBase(doc);
+  if (firstBase) handleElement(html, firstBase, visit, edits, state);
 
   const walk = (parent: ParentNode): void => {
     for (const node of parent.childNodes) {

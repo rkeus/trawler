@@ -89,6 +89,27 @@ describe('extractHtmlRefs', () => {
     const { pages } = extractHtmlRefs('<p><a href="about.html">About</p><p>next</p>', PAGE);
     expect(pages.map((p) => p.url)).toEqual([B + 'about.html']);
   });
+
+  it('applies the first <base> to refs written before it', () => {
+    const { pages, assets } = extractHtmlRefs(
+      '<link rel="icon" href="i.png"><a href="p.html">p</a><base href="/sub/">',
+      'https://x.com/about/',
+    );
+    expect(pages.map((p) => p.url)).toEqual(['https://x.com/sub/p.html']);
+    expect(assets.map((a) => a.url)).toEqual(['https://x.com/sub/i.png']);
+  });
+
+  it('reads entity-decoded text in SVG <style>', () => {
+    expect(extractHtmlRefs('<svg><style>.a{fill:url(&quot;#g&quot;)}</style></svg>', PAGE).assets).toEqual([]);
+    expect(
+      extractHtmlRefs('<svg><style>.a{fill:url(/i.png?x=1&amp;y=2)}</style></svg>', PAGE).assets.map((a) => a.url),
+    ).toEqual(['https://x.com/i.png?x=1&y=2']);
+  });
+
+  it('judges lazy attribute values more precisely', () => {
+    const html = '<div data-image="1.25" data-src="v1.25"></div><img data-src="img/photo(1).jpg">';
+    expect(extractHtmlRefs(html, PAGE).assets.map((a) => a.url)).toEqual([B + 'img/photo(1).jpg']);
+  });
 });
 
 describe('walkHtml', () => {

@@ -106,4 +106,17 @@ describe('rewriteHtml', () => {
     const out = rw('<style>.a{color:red}\r\n.h{background:url(/html/assets/img/hero.jpg)}</style>');
     expect(out).toBe('<style>.a{color:red}\r\n.h{background:url("assets/img/hero.jpg")}</style>');
   });
+
+  it('rewrites refs before a kept <base> relative to that base', () => {
+    const resolveLocalDir = (u: string) => (u === 'https://x.com/html/' ? '' : undefined);
+    expect(
+      rewriteHtml(
+        '<link rel="icon" href="assets/img/a.png"><base href="/html/">',
+        'https://x.com/html/blog/post.html',
+        'blog/post.html',
+        resolve,
+        { resolveLocalDir },
+      ),
+    ).toBe('<link rel="icon" href="assets/img/a.png"><base href="../">');
+  });
 });
