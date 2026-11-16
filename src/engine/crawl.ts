@@ -16,11 +16,15 @@ import {
 import { compileExcludePatterns, type Settings } from '../shared/settings';
 import type { AssetKind } from '../shared/types';
 import type { BlobStore } from './blob-store';
-import type { AdaptivePool } from './pool';
+import { AdaptivePool } from './pool';
 import { loadRobots } from './robots-loader';
-import { decodeBody } from './text';
+import { decodeBody, type DecodedText } from './text';
 import {
   FetchError,
+  type CaptureOptions,
+  type CaptureResult,
+  type CapturedResponse,
+  type Capturer,
   type FetchFailureReason,
   type Fetcher,
   type FetchedResource,
@@ -77,6 +81,13 @@ export interface CrawlOptions {
   robotsAgent?: string;
   /** from resolveSeed(); fetched here when omitted */
   seed?: ResolvedSeed;
+  /** "js" renders pages with `capturer`; default "static" */
+  mode?: 'static' | 'js';
+  capturer?: Capturer;
+  /** a render of the start page made during detection; reused instead of rendering twice */
+  seedCapture?: CaptureResult;
+  /** called once when the crawl halts on a fatal error, so the caller can abort requests in flight */
+  onHalt?: () => void;
 }
 
 export interface CrawlResult {
@@ -121,7 +132,9 @@ export async function resolveSeed(fetcher: Fetcher, seedUrl: string): Promise<Re
 
 export async function crawl(opts: CrawlOptions): Promise<CrawlResult> {
   const { settings, fetcher, pool, signal, emit } = opts;
+  const mode = opts.mode ?? 'static';
   if (opts.kind === 'download' && !opts.blobStore) throw new Error('crawl: blobStore is required for downloads');
+  if (mode === 'js' && !opts.capturer) throw new Error('crawl: a capturer is required in JS mode');
 
   const seed = opts.seed ?? (await resolveSeed(fetcher, opts.seedUrl));
   const scope = computeScope(seed.start);
@@ -136,6 +149,8 @@ export async function crawl(opts: CrawlOptions): Promise<CrawlResult> {
   const counters: ProgressCounters = { pagesDone: 0, pagesQueued: 0, assetsDone: 0, assetsQueued: 0, bytes: 0, errors: 0 };
   const tasks: Promise<void>[] = [];
   let outOfScopeRedirects = 0;
+  const renderPool = new AdaptivePool({ concurrency: settings.renderConcurrency });
+  let rendersStarted = 0;
 
   // `halt` stops new work on cancel or on the first fatal (non-network) error, e.g. a full disk.
   const halt = new AbortController();
@@ -153,6 +168,14 @@ export async function crawl(opts: CrawlOptions): Promise<CrawlResult> {
   const progress = (): void => emit({ type: 'progress', counters: { ...counters } });
   const find = (url: string): CrawlRecord | undefined => records.get(url) ?? landed.get(url);
   const halted = (): boolean => halt.signal.aborted;
+  const shouldRender = (): boolean =>
+    mode === 'js' && (opts.kind === 'download' || rendersStarted < settings.analyzeRenderPages);
+  const captureOptions = (): CaptureOptions => ({
+    timeoutMs: settings.renderTimeoutMs,
+    networkIdleMs: settings.networkIdleMs,
+    autoScroll: settings.autoScroll,
+    signal: halt.signal,
+  });
   const newRecord = (url: string, kind: AssetKind, isPage: boolean, depth: number, referrer?: string): CrawlRecord => ({
     url,
     finalUrl: url,
@@ -168,12 +191,23 @@ export async function crawl(opts: CrawlOptions): Promise<CrawlResult> {
     if (referrer && !rec.referrers.includes(referrer)) rec.referrers.push(referrer);
   };
 
+  /** Counts an external URL; returns false when external downloads are off. */
+  function allowExternal(url: string): boolean {
+    if (!externalSeen.has(url)) {
+      externalSeen.add(url);
+      const host = new URL(url).host;
+      externalHosts.set(host, (externalHosts.get(host) ?? 0) + 1);
+    }
+    return settings.downloadExternal;
+  }
+
   function enqueuePage(
     raw: string,
     depth: number,
     referrer?: string,
     force = false,
     prefetched?: FetchedResource,
+    prefetchedCapture?: CaptureResult,
   ): CrawlRecord | undefined {
     if (halted()) return undefined;
     const url = canon(raw);
@@ -187,7 +221,7 @@ export async function crawl(opts: CrawlOptions): Promise<CrawlResult> {
     const rec = newRecord(url, 'page', true, depth, referrer);
     records.set(url, rec);
     counters.pagesQueued++;
-    tasks.push(pool.run(() => fetchPage(rec, prefetched), halt.signal));
+    tasks.push(pool.run(() => fetchPage(rec, prefetched, prefetchedCapture), halt.signal));
     return rec;
   }
 
@@ -199,14 +233,7 @@ export async function crawl(opts: CrawlOptions): Promise<CrawlResult> {
       addReferrer(existing, referrer);
       return;
     }
-    if (!isSameHost(url)) {
-      if (!externalSeen.has(url)) {
-        externalSeen.add(url);
-        const host = new URL(url).host;
-        externalHosts.set(host, (externalHosts.get(host) ?? 0) + 1);
-      }
-      if (!settings.downloadExternal) return;
-    }
+    if (!isSameHost(url) && !allowExternal(url)) return;
     const rec = newRecord(url, kind, false, 0, referrer);
     records.set(url, rec);
     counters.assetsQueued++;
@@ -222,8 +249,8 @@ export async function crawl(opts: CrawlOptions): Promise<CrawlResult> {
     rec.fetched = true;
     rec.status = res.status;
     rec.contentType = res.contentType;
-    rec.bytes = res.body.length;
-    counters.bytes += res.body.length;
+    rec.bytes = res.size;
+    counters.bytes += res.size;
     rec.finalUrl = final;
     if (final !== rec.url) {
       aliases.set(rec.url, final);
@@ -237,15 +264,27 @@ export async function crawl(opts: CrawlOptions): Promise<CrawlResult> {
     return true;
   }
 
-  async function store(rec: CrawlRecord, body: Buffer, keepForAnalyze: boolean): Promise<void> {
-    if (opts.kind === 'download') rec.blobId = await opts.blobStore!.put(body);
-    else if (keepForAnalyze) rec.body = body;
+  async function store(rec: CrawlRecord, res: FetchedResource, keepForAnalyze: boolean): Promise<void> {
+    if (res.spilledBlobId) {
+      rec.blobId = res.spilledBlobId;
+      return;
+    }
+    if (opts.kind === 'download') rec.blobId = await opts.blobStore!.put(res.body);
+    else if (keepForAnalyze) rec.body = res.body;
+  }
+
+  async function textOf(res: FetchedResource): Promise<DecodedText> {
+    const body = res.spilledBlobId ? await opts.blobStore!.get(res.spilledBlobId) : res.body;
+    return decodeBody(body, res.contentType);
   }
 
   /** Records a per-URL failure. Anything that is not a FetchError is fatal: it halts the whole crawl. */
   function fail(rec: CrawlRecord, err: unknown): void {
     if (!(err instanceof FetchError)) {
-      if (!fatal) fatal = { error: err };
+      if (!fatal) {
+        fatal = { error: err };
+        opts.onHalt?.();
+      }
       halt.abort();
       return;
     }
@@ -259,9 +298,81 @@ export async function crawl(opts: CrawlOptions): Promise<CrawlResult> {
 
   const cancelled = (url: string): FetchError => new FetchError('Cancelled', url, 'aborted');
 
-  async function fetchPage(rec: CrawlRecord, prefetched?: FetchedResource): Promise<void> {
+  async function render(rec: CrawlRecord): Promise<CaptureResult> {
+    rendersStarted++;
     try {
-      if (!prefetched && halted()) throw cancelled(rec.url);
+      return await renderPool.run(() => opts.capturer!.capture(rec.url, captureOptions()), halt.signal);
+    } catch (err) {
+      if (err instanceof FetchError) throw err;
+      throw new FetchError(`Rendering failed: ${err instanceof Error ? err.message : String(err)}`, rec.url, 'network');
+    }
+  }
+
+  /** Adopts a response the browser already loaded, so it is not fetched again. */
+  async function adopt(r: CapturedResponse, referrer: string): Promise<void> {
+    if (halted() || r.status < 200 || r.status >= 300) return;
+    const n = normalizeUrl(r.url);
+    if (!n) return;
+    const url = canon(n);
+    if (find(url)) return;
+    if (!isSameHost(url) && !allowExternal(url)) return;
+    const kind = kindFromUrl(url, r.contentType);
+    if (kind === 'page') return; // documents (iframes) are crawled as pages
+    const rec = newRecord(url, kind, false, 0, referrer);
+    records.set(url, rec);
+    counters.assetsQueued++;
+    const res: FetchedResource = {
+      url,
+      finalUrl: url,
+      status: r.status,
+      contentType: r.contentType,
+      headers: {},
+      body: r.body,
+      size: r.body.length,
+    };
+    accept(rec, res, url);
+    await store(rec, res, kind === 'css');
+    if (kind === 'css') {
+      for (const ref of extractCssRefs(decodeBody(r.body, r.contentType).text, url)) enqueueAsset(ref.url, ref.kind, url);
+    }
+    counters.assetsDone++;
+  }
+
+  async function handleCapture(rec: CrawlRecord, cap: CaptureResult): Promise<void> {
+    const final = canon(normalizeUrl(cap.finalUrl) ?? rec.url);
+    if (final !== rec.url && !inScope(final, scope)) {
+      rec.skipped = `Redirects outside the crawl scope to ${final}`;
+      outOfScopeRedirects++;
+      return;
+    }
+    if (cap.status >= 400) throw new FetchError(`HTTP ${cap.status}`, rec.url, 'http', cap.status);
+    const body = Buffer.from(cap.html, 'utf8');
+    const res: FetchedResource = {
+      url: rec.url,
+      finalUrl: cap.finalUrl,
+      status: cap.status,
+      contentType: 'text/html; charset=utf-8',
+      headers: {},
+      body,
+      size: body.length,
+    };
+    if (!accept(rec, res, final)) return;
+    await store(rec, res, true);
+    for (const r of cap.resources) await adopt(r, rec.finalUrl);
+    // refs from the served document plus the rendered DOM (JS-inserted images, SPA links)
+    const served = extractHtmlRefs(cap.html, rec.finalUrl);
+    const live = extractHtmlRefs(cap.renderedHtml, rec.finalUrl);
+    for (const a of [...served.assets, ...live.assets]) enqueueAsset(a.url, a.kind, rec.finalUrl);
+    for (const p of [...served.pages, ...live.pages]) enqueuePage(p.url, rec.depth + 1, rec.finalUrl);
+  }
+
+  async function fetchPage(rec: CrawlRecord, prefetched?: FetchedResource, prefetchedCapture?: CaptureResult): Promise<void> {
+    try {
+      if (!prefetched && !prefetchedCapture && halted()) throw cancelled(rec.url);
+      if (prefetchedCapture || shouldRender()) {
+        await handleCapture(rec, prefetchedCapture ?? (await render(rec)));
+        return;
+      }
       const res = prefetched ?? (await fetcher.fetch(rec.url));
       const final = canon(normalizeUrl(res.finalUrl) ?? rec.url);
       if (final !== rec.url && !inScope(final, scope)) {
@@ -274,11 +385,11 @@ export async function crawl(opts: CrawlOptions): Promise<CrawlResult> {
         // a page link that serves something else (PDF, image…): keep it as an asset
         rec.isPage = false;
         rec.kind = kindFromUrl(rec.finalUrl, res.contentType);
-        await store(rec, res.body, false);
+        await store(rec, res, false);
         return;
       }
-      await store(rec, res.body, true);
-      const { text } = decodeBody(res.body, res.contentType);
+      await store(rec, res, true);
+      const { text } = await textOf(res);
       const parsed = extractHtmlRefs(text, rec.finalUrl);
       for (const a of parsed.assets) enqueueAsset(a.url, a.kind, rec.finalUrl);
       for (const p of parsed.pages) enqueuePage(p.url, rec.depth + 1, rec.finalUrl);
@@ -304,9 +415,9 @@ export async function crawl(opts: CrawlOptions): Promise<CrawlResult> {
       // keep a "css" hint when the server labels the stylesheet as plain text/data
       if (kind !== 'other' && !(rec.kind === 'css' && kind === 'data')) rec.kind = kind;
       const isCss = rec.kind === 'css';
-      await store(rec, res.body, isCss);
+      await store(rec, res, isCss);
       if (isCss) {
-        const { text } = decodeBody(res.body, res.contentType);
+        const { text } = await textOf(res);
         for (const ref of extractCssRefs(text, rec.finalUrl)) enqueueAsset(ref.url, ref.kind, rec.finalUrl);
       }
     } catch (err) {
@@ -323,7 +434,7 @@ export async function crawl(opts: CrawlOptions): Promise<CrawlResult> {
   if (!robots.isAllowed(startUrl.pathname + startUrl.search)) {
     warnings.push('robots.txt disallows the start URL; it was fetched anyway because you asked for it.');
   }
-  const startRec = enqueuePage(start, 0, undefined, true, seed.response);
+  const startRec = enqueuePage(start, 0, undefined, true, seed.response, opts.seedCapture);
   if (startRec && requested !== start) {
     aliases.set(requested, start);
     landed.set(requested, startRec); // a later link to the pre-redirect URL is not fetched again
