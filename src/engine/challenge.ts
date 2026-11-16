@@ -8,6 +8,16 @@ export function looksLikeChallengePage(text: string): boolean {
   return CHALLENGE_TITLE.test(text) || CHALLENGE_MARKERS.test(text);
 }
 
+const INTERSTITIAL_MARKERS = /cf-browser-verification|_cf_chl_opt|cf_chl_/i;
+
+/**
+ * Stricter than looksLikeChallengePage: ignores "challenge-platform", which Cloudflare also injects into
+ * normal pages. Used to decide whether a challenge in the browser has been passed.
+ */
+export function isChallengeInterstitial(text: string): boolean {
+  return CHALLENGE_TITLE.test(text) || INTERSTITIAL_MARKERS.test(text);
+}
+
 /** Detects bot-protection interstitials (Cloudflare and similar) served instead of real content. */
 export function isBotChallenge(status: number, headers: Record<string, string>, bodyStart: string): boolean {
   if ((headers['cf-mitigated'] ?? '').toLowerCase() === 'challenge') return true;

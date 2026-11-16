@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, it, expect, vi } from 'vitest';
 import { startServer, type TestServer } from '../../helpers/http-server';
 import { createFetcher, backoffMs, parseRetryAfter } from '../../../src/engine/fetcher';
-import { isBotChallenge, looksLikeChallengePage } from '../../../src/engine/challenge';
+import { isBotChallenge, isChallengeInterstitial, looksLikeChallengePage } from '../../../src/engine/challenge';
 import { FetchError, type FetchImpl } from '../../../src/engine/types';
 import { BlobStore } from '../../../src/engine/blob-store';
 import { makeTmpDir } from '../../helpers/tmp';
@@ -182,5 +182,10 @@ describe('helpers', () => {
     expect(looksLikeChallengePage('<title>Just a moment...</title>')).toBe(true);
     expect(looksLikeChallengePage('x<div id="challenge-platform">')).toBe(true);
     expect(looksLikeChallengePage('<title>Home</title><p>Welcome</p>')).toBe(false);
+  });
+  it('tells real interstitials from pages that only load Cloudflare scripts', () => {
+    expect(isChallengeInterstitial('<title>Just a moment...</title>')).toBe(true);
+    expect(isChallengeInterstitial('<script>window._cf_chl_opt={}</script>')).toBe(true);
+    expect(isChallengeInterstitial('<title>Shop</title><script src="/cdn-cgi/challenge-platform/scripts/jsd/main.js"></script>')).toBe(false);
   });
 });

@@ -123,8 +123,12 @@ export interface CaptureResult {
   resources: CapturedResponse[];
   /** XHR/fetch responses with JSON content */
   dataRequests: number;
-  /** requests that failed while rendering: status >= 400, or 0 for network errors */
-  failed: { url: string; status: number }[];
+  /**
+   * Requests that failed while rendering (status >= 400, or 0 for network errors) and redirects (3xx).
+   * `method` and `type` let the verifier ignore beacons and POSTs; on the preview server a same-origin
+   * redirect means a file is not where the page expects it.
+   */
+  failed: { url: string; status: number; method?: string; type?: string }[];
 }
 
 /**
