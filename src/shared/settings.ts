@@ -32,6 +32,10 @@ export interface Settings {
   nonEmptyFolder: NonEmptyFolderPolicy;
   verifyAfterDownload: boolean;
   historySize: number;
+  /** how long the pages and stylesheets an analysis fetched stay reusable by the next download of the same URL; 0 = never */
+  analysisCacheTtlMs: number;
+  /** memory budget for those reusable bodies; 0 = keep nothing */
+  analysisCacheMaxBytes: number;
   detection: {
     thresholds: DetectionThresholds;
     weights: DetectionWeights;
@@ -63,6 +67,8 @@ const DEFAULTS: Settings = {
   nonEmptyFolder: 'ask',
   verifyAfterDownload: true,
   historySize: 20,
+  analysisCacheTtlMs: 1800000,
+  analysisCacheMaxBytes: 67108864,
   detection: {
     thresholds: { static: 0.3, js: 0.6 },
     weights: { emptyMount: 0.3, textRatio: 0.25, frameworkMarkers: 0.3, dataRequests: 0.1, moduleScripts: 0.05 },
@@ -99,7 +105,9 @@ type IntKey =
   | 'memoryBodyLimitBytes'
   | 'challengeTimeoutMs'
   | 'analyzeRenderPages'
-  | 'historySize';
+  | 'historySize'
+  | 'analysisCacheTtlMs'
+  | 'analysisCacheMaxBytes';
 
 const INT_RANGES: Record<IntKey, [number, number]> = {
   maxDepth: [0, 50],
@@ -116,6 +124,8 @@ const INT_RANGES: Record<IntKey, [number, number]> = {
   challengeTimeoutMs: [5000, 300000],
   analyzeRenderPages: [1, 100],
   historySize: [0, 500],
+  analysisCacheTtlMs: [0, 86400000],
+  analysisCacheMaxBytes: [0, 1073741824],
 };
 
 type BoolKey = 'downloadExternal' | 'autoScroll' | 'respectRobotsTxt' | 'rewriteJsAbsoluteUrls' | 'verifyAfterDownload';

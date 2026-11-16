@@ -36,6 +36,8 @@ describe('resolveSettings', () => {
       nonEmptyFolder: 'ask',
       verifyAfterDownload: true,
       historySize: 20,
+      analysisCacheTtlMs: 1800000,
+      analysisCacheMaxBytes: 67108864,
       detection: {
         thresholds: { static: 0.3, js: 0.6 },
         weights: { emptyMount: 0.3, textRatio: 0.25, frameworkMarkers: 0.3, dataRequests: 0.1, moduleScripts: 0.05 },
@@ -47,6 +49,13 @@ describe('resolveSettings', () => {
     const { settings, warnings } = resolveSettings({ concurrency: 100, maxDepth: -3 });
     expect(settings.concurrency).toBe(32);
     expect(settings.maxDepth).toBe(0);
+    expect(warnings).toHaveLength(2);
+  });
+
+  it('clamps the analysis cache settings', () => {
+    const { settings, warnings } = resolveSettings({ analysisCacheTtlMs: -5, analysisCacheMaxBytes: 2147483648 });
+    expect(settings.analysisCacheTtlMs).toBe(0);
+    expect(settings.analysisCacheMaxBytes).toBe(1073741824);
     expect(warnings).toHaveLength(2);
   });
 
