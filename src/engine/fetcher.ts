@@ -27,6 +27,8 @@ export interface FetcherOptions {
 }
 
 const RETRYABLE = new Set([408, 429, 500, 502, 503, 504]);
+/** error responses are read only far enough to recognize a challenge page */
+const ERROR_BODY_LIMIT = 65536;
 
 /** 500 ms, then 2000 ms (cap). `attempt` is 1-based. */
 export function backoffMs(attempt: number): number {
@@ -49,19 +51,37 @@ function headersToRecord(headers: Headers): Record<string, string> {
   return out;
 }
 
-/** Rejects as soon as `signal` aborts, even if the underlying promise ignores the signal. */
-function raceAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
-  if (signal.aborted) return Promise.reject(signal.reason);
+/**
+ * Rejects as soon as `signal` aborts, even if the underlying promise ignores the signal.
+ * `onLate` receives a value that arrives after the abort, so it can be released (e.g. cancel a response body).
+ */
+function raceAbort<T>(promise: Promise<T>, signal: AbortSignal, onLate?: (value: T) => void): Promise<T> {
+  const releaseLate = (): void => {
+    if (onLate) promise.then(onLate, () => undefined);
+  };
+  if (signal.aborted) {
+    releaseLate();
+    return Promise.reject(signal.reason);
+  }
   return new Promise<T>((resolve, reject) => {
-    const onAbort = (): void => reject(signal.reason);
+    let settled = false;
+    const onAbort = (): void => {
+      settled = true;
+      reject(signal.reason);
+      releaseLate();
+    };
     signal.addEventListener('abort', onAbort, { once: true });
     promise.then(
       (v) => {
         signal.removeEventListener('abort', onAbort);
+        if (settled) return;
+        settled = true;
         resolve(v);
       },
       (e: unknown) => {
         signal.removeEventListener('abort', onAbort);
+        if (settled) return;
+        settled = true;
         reject(e);
       },
     );
@@ -83,6 +103,7 @@ async function readBody(
   idleMs: number,
   spill: BlobStore | undefined,
   limit: number,
+  maxBytes: number,
 ): Promise<Body> {
   if (!res.body) return { body: Buffer.alloc(0), size: 0 };
   const reader = res.body.getReader();
@@ -106,13 +127,18 @@ async function readBody(
     for (;;) {
       const { done, value } = await raceAbort(reader.read(), signal);
       if (done) break;
-      arm();
+      clearTimeout(idle); // disk writes below do not count as network silence
       size += value.byteLength;
       if (writer) await writer.write(value);
       else {
         chunks.push(Buffer.from(value));
         if (spill && size > limit) await spillNow();
       }
+      if (size >= maxBytes) {
+        await reader.cancel().catch(() => undefined);
+        break;
+      }
+      arm();
     }
     if (writer) return { body: Buffer.alloc(0), size, spilledBlobId: await writer.finish() };
     return { body: Buffer.concat(chunks), size };
@@ -163,9 +189,19 @@ export function createFetcher(opts: FetcherOptions): Fetcher {
         let res: Response;
         let body: Body;
         try {
-          res = await raceAbort(opts.fetchImpl(url, { headers, redirect: 'follow', signal }), signal);
+          res = await raceAbort(opts.fetchImpl(url, { headers, redirect: 'follow', signal }), signal, (late) => {
+            void late.body?.cancel().catch(() => undefined); // free the connection of a response that came too late
+          });
           clearTimeout(headerTimer);
-          body = await readBody(res, ctl, signal, idleMs, res.ok ? opts.spillTo?.() : undefined, limit);
+          body = await readBody(
+            res,
+            ctl,
+            signal,
+            idleMs,
+            res.ok ? opts.spillTo?.() : undefined,
+            limit,
+            res.ok ? Number.POSITIVE_INFINITY : ERROR_BODY_LIMIT,
+          );
         } catch (err) {
           clearTimeout(headerTimer);
           const e = classify(url, ctl, err);

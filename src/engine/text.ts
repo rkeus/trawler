@@ -34,3 +34,8 @@ export function decodeBody(body: Buffer, contentType: string | undefined): Decod
 export function encodeBody(text: string, encoding: TextEncodingKind): Buffer {
   return Buffer.from(text, encoding);
 }
+
+/** Points the document's first charset declaration at UTF-8 (used when a page is stored as UTF-8 text). */
+export function declareUtf8(html: string): string {
+  return html.replace(/(<meta\b[^>]*?charset\s*=\s*["']?)([\w-]+)/i, '$1utf-8');
+}

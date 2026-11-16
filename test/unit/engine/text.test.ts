@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { decodeBody, encodeBody } from '../../../src/engine/text';
+import { decodeBody, encodeBody, declareUtf8 } from '../../../src/engine/text';
 import { contentTypeForPath } from '../../../src/engine/content-type';
 import { sleep } from '../../../src/engine/sleep';
 
@@ -47,5 +47,15 @@ describe('sleep', () => {
     const p = sleep(10000, ac.signal);
     ac.abort();
     await expect(p).rejects.toBeDefined();
+  });
+});
+
+describe('declareUtf8', () => {
+  it('points the first charset declaration at UTF-8', () => {
+    expect(declareUtf8('<meta charset="windows-1250"><p>x</p>')).toBe('<meta charset="utf-8"><p>x</p>');
+    expect(declareUtf8('<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-2">')).toBe(
+      '<meta http-equiv="Content-Type" content="text/html; charset=utf-8">',
+    );
+    expect(declareUtf8('<p>no meta</p>')).toBe('<p>no meta</p>');
   });
 });

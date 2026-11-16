@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, it, expect, vi } from 'vitest';
 import { startServer, type TestServer } from '../../helpers/http-server';
 import { createFetcher, backoffMs, parseRetryAfter } from '../../../src/engine/fetcher';
 import { isBotChallenge } from '../../../src/engine/challenge';
-import { FetchError } from '../../../src/engine/types';
+import { FetchError, type FetchImpl } from '../../../src/engine/types';
 import { BlobStore } from '../../../src/engine/blob-store';
 import { makeTmpDir } from '../../helpers/tmp';
 import path from 'node:path';
@@ -127,6 +127,35 @@ describe('createFetcher', () => {
     expect(r.size).toBe(65536);
     expect(r.spilledBlobId).toBeDefined();
     expect((await store.get(r.spilledBlobId!)).equals(Buffer.alloc(65536, 7))).toBe(true);
+  });
+
+  it('cancels a response that arrives after a timeout (fetchImpl ignoring the signal)', async () => {
+    let cancelled = false;
+    const slowImpl: FetchImpl = () =>
+      new Promise((resolve) =>
+        setTimeout(
+          () =>
+            resolve(
+              new Response(
+                new ReadableStream({
+                  start(c) {
+                    c.enqueue(new Uint8Array([1]));
+                  },
+                  cancel() {
+                    cancelled = true;
+                  },
+                }),
+              ),
+            ),
+          150,
+        ),
+      );
+    const err = await createFetcher({ fetchImpl: slowImpl, timeoutMs: 30, retries: 0, signal: new AbortController().signal })
+      .fetch('http://x.test/')
+      .catch((e: unknown) => e);
+    expect((err as FetchError).reason).toBe('timeout');
+    await new Promise((r) => setTimeout(r, 250));
+    expect(cancelled).toBe(true);
   });
 });
 
