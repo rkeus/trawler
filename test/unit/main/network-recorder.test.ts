@@ -77,9 +77,9 @@ describe('NetworkRecorder', () => {
     load(rec, '8', 'https://x.com/api.json', 'Fetch', 200, 'application/json');
     load(rec, '9', 'https://x.com/404.png', 'Image', 404, 'text/html');
     await rec.settle();
-    expect(rec.failed).toEqual([
-      { url: 'https://x.com/gone.js', status: 0 },
-      { url: 'https://x.com/404.png', status: 404 },
+    expect(rec.failed.map((f) => [f.url, f.status, f.method, f.type])).toEqual([
+      ['https://x.com/gone.js', 0, 'GET', 'Script'],
+      ['https://x.com/404.png', 404, 'GET', 'Image'],
     ]);
     expect(rec.dataRequests).toBe(1);
     expect(rec.resources.find((r) => r.url.endsWith('404.png'))?.body).toBeUndefined();
@@ -117,5 +117,57 @@ describe('NetworkRecorder', () => {
   it('builds UTF-8 content types', () => {
     expect(utf8ContentType('text/css; charset=iso-8859-2')).toBe('text/css; charset=utf-8');
     expect(utf8ContentType('application/javascript')).toBe('application/javascript; charset=utf-8');
+  });
+
+  it('keeps the first requested document as the page even if an iframe finishes first', async () => {
+    const { rec } = recorder({ '1': { body: '<p>main</p>', base64Encoded: false }, '2': { body: '<p>frame</p>', base64Encoded: false } });
+    rec.handle('Network.requestWillBeSent', { requestId: '1', request: { url: 'https://x.com/' }, type: 'Document' });
+    rec.handle('Network.requestWillBeSent', { requestId: '2', request: { url: 'https://x.com/frame' }, type: 'Document' });
+    for (const [id, url] of [['2', 'https://x.com/frame'], ['1', 'https://x.com/']] as const) {
+      rec.handle('Network.responseReceived', { requestId: id, type: 'Document', response: { url, status: 200, mimeType: 'text/html', headers: {} } });
+      rec.handle('Network.loadingFinished', { requestId: id });
+      await rec.settle();
+    }
+    expect(rec.document).toMatchObject({ url: 'https://x.com/', html: '<p>main</p>' });
+  });
+
+  it('keeps the document response when the navigation turns into a download', async () => {
+    const { rec } = recorder({});
+    rec.handle('Network.requestWillBeSent', { requestId: '1', request: { url: 'https://x.com/file' }, type: 'Document' });
+    rec.handle('Network.responseReceived', {
+      requestId: '1',
+      type: 'Document',
+      response: { url: 'https://x.com/file', status: 200, mimeType: 'application/zip', headers: { 'content-type': 'application/zip' } },
+    });
+    expect(rec.documentResponse).toEqual({ url: 'https://x.com/file', status: 200, contentType: 'application/zip' });
+    rec.handle('Network.loadingFailed', { requestId: '1', canceled: false });
+    expect(rec.document).toEqual({ url: 'https://x.com/file', status: 200, contentType: 'application/zip', html: '' });
+    expect(rec.failed).toEqual([]);
+  });
+
+  it('records POST failures with their method and redirects as 3xx entries', async () => {
+    const { rec } = recorder({});
+    rec.handle('Network.requestWillBeSent', { requestId: '5', request: { url: 'https://x.com/a.png' }, type: 'Image' });
+    rec.handle('Network.requestWillBeSent', {
+      requestId: '5',
+      request: { url: 'https://x.com/' },
+      type: 'Image',
+      redirectResponse: { url: 'https://x.com/a.png', status: 302 },
+    });
+    rec.handle('Network.requestWillBeSent', { requestId: '4', request: { url: 'https://x.com/api/save', method: 'POST' }, type: 'Fetch' });
+    rec.handle('Network.responseReceived', { requestId: '4', type: 'Fetch', response: { url: 'https://x.com/api/save', status: 405, mimeType: 'text/plain', headers: {} } });
+    rec.handle('Network.loadingFinished', { requestId: '4' });
+    await rec.settle();
+    expect(rec.failed).toEqual([
+      { url: 'https://x.com/a.png', status: 302, method: 'GET', type: 'Image' },
+      { url: 'https://x.com/api/save', status: 405, method: 'POST', type: 'Fetch' },
+    ]);
+  });
+
+  it('does not let long-lived connections block network idle', () => {
+    const { rec, tick } = recorder({});
+    rec.handle('Network.requestWillBeSent', { requestId: '1', request: { url: 'https://x.com/events' }, type: 'EventSource' });
+    tick(400);
+    expect(rec.idleFor()).toBe(400);
   });
 });
