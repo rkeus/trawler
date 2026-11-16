@@ -3,11 +3,18 @@ import type { Capturer, MissingRef, Verifier, VerifyReport } from '../engine';
 export interface BrowserVerifierOptions {
   timeoutMs: number;
   networkIdleMs: number;
+  /** pages checked at once (settings.renderConcurrency) */
+  concurrency: number;
 }
+
+/** beacons and CSP reports are not files of the copy */
+const IGNORED_TYPES = new Set(['Ping', 'CSPViolationReport']);
 
 /**
  * Loads every page of the local copy (served by the preview server) in a hidden browser and reports failed
- * same-origin requests: missing files, broken imports and failed JSON fetches, including ones made by JavaScript.
+ * same-origin GET requests: missing files, broken imports, failed JSON fetches, including ones made by
+ * JavaScript. A same-origin redirect counts as missing, because the preview server only redirects paths that
+ * are outside the copy.
  */
 export function createBrowserVerifier(capturer: Capturer, opts: BrowserVerifierOptions): Verifier {
   return {
@@ -15,8 +22,8 @@ export function createBrowserVerifier(capturer: Capturer, opts: BrowserVerifierO
       const origin = new URL(baseUrl).origin;
       const missing: MissingRef[] = [];
       let pagesOk = 0;
-      for (const page of pages) {
-        if (signal.aborted) break;
+
+      const check = async (page: string): Promise<void> => {
         const pageUrl = new URL(page.split('/').map(encodeURIComponent).join('/'), baseUrl).href;
         try {
           const cap = await capturer.capture(pageUrl, {
@@ -27,6 +34,7 @@ export function createBrowserVerifier(capturer: Capturer, opts: BrowserVerifierO
           });
           const seen = new Set<string>();
           const bad = cap.failed.filter((f) => {
+            if ((f.method ?? 'GET') !== 'GET' || IGNORED_TYPES.has(f.type ?? '')) return false;
             let u: URL;
             try {
               u = new URL(f.url);
@@ -41,10 +49,15 @@ export function createBrowserVerifier(capturer: Capturer, opts: BrowserVerifierO
           for (const f of bad) missing.push({ page, url: f.url, status: f.status });
           if (bad.length === 0) pagesOk++;
         } catch {
-          if (signal.aborted) break;
-          missing.push({ page, url: pageUrl, status: 0 });
+          if (!signal.aborted) missing.push({ page, url: pageUrl, status: 0 });
         }
-      }
+      };
+
+      const queue = [...pages];
+      const workers = Array.from({ length: Math.max(1, Math.min(opts.concurrency, queue.length)) }, async () => {
+        while (queue.length > 0 && !signal.aborted) await check(queue.shift()!);
+      });
+      await Promise.all(workers);
       return { pagesChecked: pages.length, pagesOk, missing };
     },
   };

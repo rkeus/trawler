@@ -24,6 +24,9 @@ const SCROLL_SCRIPT = `(async () => {
   window.scrollTo(0, 0);
 })()`;
 
+/** Runs before page scripts: dialogs would block a hidden window forever. */
+const NO_DIALOGS = 'window.alert = () => {}; window.confirm = () => true; window.prompt = () => null;';
+
 const wait = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 /** Resolves with the promise's value, or with undefined once the deadline passes. */
@@ -31,11 +34,23 @@ function beforeDeadline<T>(promise: Promise<T>, deadline: number): Promise<T | u
   return Promise.race([promise, wait(Math.max(0, deadline - Date.now())).then(() => undefined)]);
 }
 
+const isHtmlType = (contentType: string | undefined): boolean => !contentType || /html/i.test(contentType);
+
 async function waitForNetworkIdle(rec: NetworkRecorder, idleMs: number, deadline: number, signal: AbortSignal): Promise<void> {
   while (Date.now() < deadline && !signal.aborted) {
     if (rec.idleFor() >= idleMs) return;
     await wait(POLL_MS);
   }
+}
+
+/** Resolves 'file' as soon as the main document turns out not to be HTML (a download link). */
+async function waitForFileDocument(rec: NetworkRecorder, deadline: number, signal: AbortSignal): Promise<'file' | undefined> {
+  while (Date.now() < deadline && !signal.aborted) {
+    const doc = rec.documentResponse;
+    if (doc && !isHtmlType(doc.contentType)) return 'file';
+    await wait(POLL_MS);
+  }
+  return undefined;
 }
 
 /**
@@ -73,49 +88,71 @@ async function captureOnce(ses: Session, url: string, o: CaptureOptions, opts: C
   try {
     wc.setAudioMuted(true);
     wc.setWindowOpenHandler(() => ({ action: 'deny' }));
-    // stay on the page's own site: scripted navigations elsewhere are blocked
+    // stay on the page's own site (the requested origin, or the one it redirected to)
     wc.on('will-navigate', (event) => {
-      if (new URL(event.url).origin !== origin) event.preventDefault();
-    });
-    // Network.enable never answers on a webContents that has not navigated yet (Electron 45): commit about:blank first
-    await wc.loadURL('about:blank');
-    wc.debugger.attach('1.3');
-    wc.debugger.on('message', (_event, method, params) => recorder.handle(method, params));
-    await wc.debugger.sendCommand('Network.enable', {
-      maxTotalBufferSize: 256 * MB,
-      maxResourceBufferSize: Math.min(Math.max(opts.maxBodyBytes * 2, MB), 128 * MB),
+      const target = new URL(event.url).origin;
+      let current = origin;
+      try {
+        current = new URL(wc.getURL()).origin;
+      } catch {
+        // no URL yet
+      }
+      if (target !== origin && target !== current) event.preventDefault();
     });
 
-    let loadError: unknown;
-    const loaded = await beforeDeadline(
-      wc.loadURL(url).then(
-        () => true,
-        (err: unknown) => {
-          loadError = err; // e.g. a PDF: the navigation turns into a (blocked) download
-          return true;
-        },
-      ),
+    // CDP commands on a fresh window wait for the first committed navigation: commit about:blank first
+    const ready = await beforeDeadline(
+      (async () => {
+        await wc.loadURL('about:blank');
+        wc.debugger.attach('1.3');
+        wc.debugger.on('message', (_event, method, params) => {
+          if (method === 'Page.javascriptDialogOpening') {
+            void wc.debugger.sendCommand('Page.handleJavaScriptDialog', { accept: true }).catch(() => undefined);
+            return;
+          }
+          recorder.handle(method, params);
+        });
+        await wc.debugger.sendCommand('Network.enable', {
+          maxTotalBufferSize: 256 * MB,
+          maxResourceBufferSize: Math.min(Math.max(opts.maxBodyBytes * 2, MB), 128 * MB),
+        });
+        await wc.debugger.sendCommand('Page.enable');
+        await wc.debugger.sendCommand('Page.addScriptToEvaluateOnNewDocument', { source: NO_DIALOGS });
+        return true;
+      })(),
       deadline,
     );
     if (o.signal.aborted) throw aborted();
-    if (loaded === undefined && !win.isDestroyed()) wc.stop(); // render timeout: keep what arrived
+    if (ready === undefined) throw new FetchError(`Timed out preparing the browser after ${o.timeoutMs} ms`, url, 'timeout');
 
-    if (!loadError) {
+    let loadError: unknown;
+    const navigation = wc.loadURL(url).then(
+      () => 'loaded' as const,
+      (err: unknown) => {
+        loadError = err; // e.g. a download link: the navigation becomes a (blocked) download
+        return 'failed' as const;
+      },
+    );
+    const outcome = await beforeDeadline(Promise.race([navigation, waitForFileDocument(recorder, deadline, o.signal)]), deadline);
+    if (o.signal.aborted) throw aborted();
+    if ((outcome === undefined || outcome === 'file') && !win.isDestroyed()) wc.stop(); // timeout, or a file: stop loading
+
+    if (outcome === 'loaded') {
       if (o.autoScroll) await beforeDeadline(wc.executeJavaScript(SCROLL_SCRIPT, true).catch(() => undefined), deadline);
       await waitForNetworkIdle(recorder, o.networkIdleMs, deadline, o.signal);
     }
     if (o.signal.aborted) throw aborted();
     await beforeDeadline(recorder.settle(), Date.now() + 5000); // body reads must not hang the capture
+    if (o.signal.aborted) throw aborted();
 
-    const doc = recorder.document;
+    const doc = recorder.document ?? (recorder.documentResponse ? { ...recorder.documentResponse, html: '' } : undefined);
     if (!doc) {
-      if (loaded === undefined) throw new FetchError(`Timed out after ${o.timeoutMs} ms`, url, 'timeout');
+      if (outcome === undefined) throw new FetchError(`Timed out after ${o.timeoutMs} ms`, url, 'timeout');
       const reason = loadError instanceof Error ? loadError.message : 'no document response';
       throw new FetchError(`Could not load the page: ${reason}`, url, 'network');
     }
-    const isHtml = !doc.contentType || /html/i.test(doc.contentType);
     let renderedHtml = '';
-    if (isHtml && !win.isDestroyed()) {
+    if (isHtmlType(doc.contentType) && !win.isDestroyed()) {
       const outer = await beforeDeadline(
         wc.executeJavaScript('document.documentElement.outerHTML').catch(() => ''),
         Date.now() + 5000,
