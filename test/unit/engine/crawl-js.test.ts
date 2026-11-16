@@ -226,4 +226,19 @@ describe('crawl (JS mode)', () => {
     const r = await run('download', cap);
     expect(r.aliases.get(`${spa.url}/app/assets/old.js`)).toBe(`${spa.url}/app/assets/index-AbCdEf12.js`);
   });
+
+  it('fetches the served HTML when a rendered page has no readable body (JS self-redirect)', async () => {
+    const cap = fakeCapturer((url) =>
+      url.endsWith('/app/about')
+        ? { html: '', renderedHtml: '<p>landing</p>', contentType: 'text/html' }
+        : { html: SPA_SHELL, renderedHtml: spaRendered() },
+    );
+    const blobStore = new BlobStore(path.join(await makeTmpDir('crawljs'), 'blobs'));
+    await blobStore.init();
+    const before = spa.requests.length;
+    const r = await run('download', cap, {}, { blobStore });
+    expect(spa.requests.slice(before)).toContain('/app/about');
+    const about = r.records.get(`${spa.url}/app/about`)!;
+    expect((await blobStore.get(about.blobId!)).toString('utf8')).toBe(SPA_SHELL);
+  });
 });

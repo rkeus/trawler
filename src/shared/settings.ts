@@ -19,6 +19,8 @@ export interface Settings {
   idleTimeoutMs: number;
   /** bodies larger than this stream to disk instead of memory */
   memoryBodyLimitBytes: number;
+  /** max time to pass a bot-protection challenge in the hidden browser */
+  challengeTimeoutMs: number;
   autoScroll: boolean;
   analyzeRenderPages: number;
   /** '' means: use Chromium's default user agent */
@@ -50,6 +52,7 @@ const DEFAULTS: Settings = {
   renderConcurrency: 2,
   idleTimeoutMs: 30000,
   memoryBodyLimitBytes: 8388608,
+  challengeTimeoutMs: 30000,
   autoScroll: true,
   analyzeRenderPages: 5,
   userAgent: '',
@@ -94,6 +97,7 @@ type IntKey =
   | 'renderConcurrency'
   | 'idleTimeoutMs'
   | 'memoryBodyLimitBytes'
+  | 'challengeTimeoutMs'
   | 'analyzeRenderPages'
   | 'historySize';
 
@@ -109,6 +113,7 @@ const INT_RANGES: Record<IntKey, [number, number]> = {
   renderConcurrency: [1, 8],
   idleTimeoutMs: [1000, 600000],
   memoryBodyLimitBytes: [262144, 536870912],
+  challengeTimeoutMs: [5000, 300000],
   analyzeRenderPages: [1, 100],
   historySize: [0, 500],
 };

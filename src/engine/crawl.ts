@@ -387,6 +387,14 @@ export async function crawl(opts: CrawlOptions): Promise<CrawlResult> {
       tasks.push(pool.run(() => fetchFileFallback(rec), halt.signal));
       return;
     }
+    if (!cap.body && cap.html === '') {
+      // the browser could not hand over the document (e.g. the page redirected itself with JavaScript):
+      // fetch the bytes the server sent, so the copy keeps the page as served
+      const served = await fetcher.fetch(rec.url);
+      if (!served.spilledBlobId && isHtmlContentType(served.contentType)) {
+        cap = { ...cap, body: served.body, ...(served.contentType ? { contentType: served.contentType } : {}), html: (await textOf(served)).text };
+      }
+    }
     // raw served bytes when available; otherwise the decoded text, stored as UTF-8 and declared as such
     const body = cap.body ?? Buffer.from(declareUtf8(cap.html), 'utf8');
     const contentType = cap.body ? (cap.contentType ?? 'text/html') : 'text/html; charset=utf-8';
