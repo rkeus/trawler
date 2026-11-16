@@ -11,7 +11,7 @@ interface Got {
 /**
  * HTTP-level verification of a local copy served by the preview server: every page must load, and every
  * same-origin asset it references (including refs inside its CSS) must return 200. JS-loaded resources are
- * not covered; the browser-based verifier in Plan 2b adds those.
+ * not covered; the browser-based verifier in Plan 2b adds those. Redirects count as missing.
  */
 export function createStaticVerifier(fetchImpl: FetchImpl): Verifier {
   return {
@@ -26,7 +26,7 @@ export function createStaticVerifier(fetchImpl: FetchImpl): Verifier {
         if (cached) return cached;
         let got: Got;
         try {
-          const r = await fetchImpl(url, { signal });
+          const r = await fetchImpl(url, { signal, redirect: 'manual' }); // a redirect means the file is not where the page expects it
           got = { status: r.status, type: r.headers.get('content-type') ?? undefined, body: Buffer.from(await r.arrayBuffer()) };
         } catch {
           got = { status: 0 };

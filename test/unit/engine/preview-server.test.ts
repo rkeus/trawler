@@ -45,6 +45,7 @@ describe('preview server', () => {
   it('404s missing files, _trawler and traversal attempts', async () => {
     expect((await get('/html/img/missing.png')).status).toBe(404);
     expect((await get('/html/_trawler/manifest.json')).status).toBe(404);
+    expect((await get('/html/_TRAWLER/manifest.json')).status).toBe(404);
     expect((await get('/html/..%2F..%2Fsecret.txt')).status).toBe(404);
   });
 
@@ -52,5 +53,20 @@ describe('preview server', () => {
     const r = await get('/elsewhere');
     expect(r.status).toBe(302);
     expect(r.headers.get('location')).toBe('/html/');
+  });
+});
+
+describe('preview server with an encoded base path', () => {
+  it('serves under a base path that contains percent-encoded characters', async () => {
+    const dir2 = await fs.mkdtemp(path.join(os.tmpdir(), 'trawler-prev2-'));
+    await fs.writeFile(path.join(dir2, 'index.html'), 'ok');
+    const p = await startPreviewServer({ root: dir2, basePath: '/my%20site/' });
+    try {
+      const r = await fetch(`${p.origin}/my%20site/index.html`, { redirect: 'manual' });
+      expect(r.status).toBe(200);
+      expect(await r.text()).toBe('ok');
+    } finally {
+      await p.close();
+    }
   });
 });

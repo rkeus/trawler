@@ -3,13 +3,14 @@ import fs from 'node:fs/promises';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
+import { pipeline } from 'node:stream';
 import { contentTypeForPath } from './content-type';
 import { isInside } from './output-dir';
 
 export interface PreviewOptions {
   /** output folder */
   root: string;
-  /** server path the copy is served under, e.g. "/html/" (manifest basePath) */
+  /** server path the copy is served under, e.g. "/html/" (manifest basePath, URL-encoded) */
   basePath: string;
   /** default 0 = any free port */
   port?: number;
@@ -36,6 +37,14 @@ async function isDir(p: string): Promise<boolean> {
     return (await fs.stat(p)).isDirectory();
   } catch {
     return false;
+  }
+}
+
+function safeDecode(s: string): string {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
   }
 }
 
@@ -66,6 +75,7 @@ async function resolveFile(root: string, rel: string): Promise<string | undefine
 export async function startPreviewServer(opts: PreviewOptions): Promise<PreviewServer> {
   const root = path.resolve(opts.root);
   const base = opts.basePath.endsWith('/') ? opts.basePath : `${opts.basePath}/`;
+  const decodedBase = safeDecode(base); // request paths are compared after decoding
 
   const server = http.createServer((req, res) => {
     void (async () => {
@@ -81,12 +91,13 @@ export async function startPreviewServer(opts: PreviewOptions): Promise<PreviewS
           res.writeHead(400).end();
           return;
         }
-        if (!pathname.startsWith(base)) {
+        if (!pathname.startsWith(decodedBase)) {
           res.writeHead(302, { location: base }).end();
           return;
         }
-        const rel = pathname.slice(base.length);
-        if (rel === '_trawler' || rel.startsWith('_trawler/')) {
+        const rel = pathname.slice(decodedBase.length);
+        const lower = rel.toLowerCase(); // Windows file names are case-insensitive
+        if (lower === '_trawler' || lower.startsWith('_trawler/')) {
           res.writeHead(404).end('Not found');
           return;
         }
@@ -97,8 +108,12 @@ export async function startPreviewServer(opts: PreviewOptions): Promise<PreviewS
         }
         const { size } = await fs.stat(file);
         res.writeHead(200, { 'content-type': contentTypeForPath(file), 'content-length': size, 'cache-control': 'no-store' });
-        if (req.method === 'HEAD') res.end();
-        else createReadStream(file).pipe(res);
+        if (req.method === 'HEAD') {
+          res.end();
+          return;
+        }
+        // pipeline() handles read errors (file deleted or locked meanwhile) without crashing the process
+        pipeline(createReadStream(file), res, () => undefined);
       } catch {
         if (!res.headersSent) res.writeHead(500);
         res.end();

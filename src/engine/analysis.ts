@@ -29,7 +29,9 @@ export function buildAnalysisReport(
   const records = [...crawl.records.values()];
   const pages = records.filter((r) => r.isPage && r.fetched && !r.duplicate && !r.error).map((r) => r.finalUrl).sort();
   const assetCounts = EMPTY_COUNTS();
-  for (const r of records) if (!r.isPage) assetCounts[r.kind]++;
+  for (const r of records) {
+    if (!r.isPage && !r.duplicate && !r.error && !r.skipped) assetCounts[r.kind]++;
+  }
 
   const warnings = [...crawl.warnings];
   const recommended: Partial<Settings> = {};

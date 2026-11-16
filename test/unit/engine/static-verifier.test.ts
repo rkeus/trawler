@@ -29,3 +29,17 @@ describe('createStaticVerifier', () => {
     ]);
   });
 });
+
+describe('createStaticVerifier with redirects', () => {
+  it('treats redirects (e.g. refs outside the base path) as missing', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'trawler-ver2-'));
+    await fs.writeFile(path.join(dir, 'index.html'), '<img src="/other.png">');
+    const p = await startPreviewServer({ root: dir, basePath: '/site/' });
+    try {
+      const r = await createStaticVerifier(fetch).verify(p.url, ['index.html'], new AbortController().signal);
+      expect(r.missing.map((m) => [new URL(m.url).pathname, m.status])).toEqual([['/other.png', 302]]);
+    } finally {
+      await p.close();
+    }
+  });
+});

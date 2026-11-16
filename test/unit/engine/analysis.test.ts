@@ -26,7 +26,7 @@ describe('buildAnalysisReport', () => {
     const { settings } = resolveSettings({ maxPages: 10 });
     const r = buildAnalysisReport(crawl, settings, 'static', undefined);
     expect(r.pages).toEqual(['https://x.com/a.html', 'https://x.com/b.html']);
-    expect(r.assetCounts).toMatchObject({ css: 1, image: 2 });
+    expect(r.assetCounts).toMatchObject({ css: 1, image: 1 });
     expect(r.externalHosts).toEqual([{ host: 'fonts.com', count: 5 }, { host: 'cdn.com', count: 3 }]);
     expect(r.warnings).toContain('w1');
     expect(r.warnings.some((w) => w.includes('Bot protection'))).toBe(true);
