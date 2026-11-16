@@ -1,0 +1,51 @@
+import { describe, it, expect } from 'vitest';
+import { decodeBody, encodeBody } from '../../../src/engine/text';
+import { contentTypeForPath } from '../../../src/engine/content-type';
+import { sleep } from '../../../src/engine/sleep';
+
+describe('decodeBody / encodeBody', () => {
+  it('round-trips UTF-8 including non-ASCII and BOM', () => {
+    const buf = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from('<p>café</p>', 'utf8')]);
+    const d = decodeBody(buf, 'text/html; charset=utf-8');
+    expect(d.encoding).toBe('utf8');
+    expect(d.text.endsWith('<p>café</p>')).toBe(true);
+    expect(encodeBody(d.text, d.encoding).equals(buf)).toBe(true);
+  });
+
+  it('uses byte-exact latin1 for declared non-UTF-8 charsets', () => {
+    const buf = Buffer.from([0x3c, 0x70, 0x3e, 0xe0, 0xe1, 0x3c, 0x2f, 0x70, 0x3e]);
+    const d = decodeBody(buf, 'text/html; charset=windows-1251');
+    expect(d.encoding).toBe('latin1');
+    expect(encodeBody(d.text, d.encoding).equals(buf)).toBe(true);
+  });
+
+  it('reads a <meta charset> when the header has none', () => {
+    const buf = Buffer.from('<meta charset="iso-8859-2"><p>é</p>', 'latin1');
+    expect(decodeBody(buf, 'text/html').encoding).toBe('latin1');
+  });
+
+  it('falls back to latin1 for invalid UTF-8 without a declaration', () => {
+    const buf = Buffer.from([0x61, 0xff, 0x62]);
+    const d = decodeBody(buf, undefined);
+    expect(d.encoding).toBe('latin1');
+    expect(encodeBody(d.text, d.encoding).equals(buf)).toBe(true);
+  });
+});
+
+describe('contentTypeForPath', () => {
+  it('maps common extensions', () => {
+    expect(contentTypeForPath('a/index.html')).toBe('text/html');
+    expect(contentTypeForPath('a/style.CSS')).toBe('text/css');
+    expect(contentTypeForPath('x.woff2')).toBe('font/woff2');
+    expect(contentTypeForPath('x.unknownext')).toBe('application/octet-stream');
+  });
+});
+
+describe('sleep', () => {
+  it('rejects when aborted', async () => {
+    const ac = new AbortController();
+    const p = sleep(10000, ac.signal);
+    ac.abort();
+    await expect(p).rejects.toBeDefined();
+  });
+});
