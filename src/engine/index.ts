@@ -3,7 +3,7 @@ export { sleep } from './sleep';
 export { decodeBody, encodeBody, type DecodedText, type TextEncodingKind } from './text';
 export { contentTypeForPath } from './content-type';
 export { AdaptivePool, type PoolOptions } from './pool';
-export { isBotChallenge, withChallengeSolver } from './challenge';
+export { isBotChallenge, looksLikeChallengePage, withChallengeSolver } from './challenge';
 export { detectArchitecture, type ArchitectureResult } from './detect-architecture';
 export { createFetcher, backoffMs, parseRetryAfter, type FetcherOptions } from './fetcher';
 export { BlobStore, type BlobWriter } from './blob-store';

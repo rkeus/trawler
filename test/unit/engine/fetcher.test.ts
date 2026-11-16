@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, it, expect, vi } from 'vitest';
 import { startServer, type TestServer } from '../../helpers/http-server';
 import { createFetcher, backoffMs, parseRetryAfter } from '../../../src/engine/fetcher';
-import { isBotChallenge } from '../../../src/engine/challenge';
+import { isBotChallenge, looksLikeChallengePage } from '../../../src/engine/challenge';
 import { FetchError, type FetchImpl } from '../../../src/engine/types';
 import { BlobStore } from '../../../src/engine/blob-store';
 import { makeTmpDir } from '../../helpers/tmp';
@@ -176,5 +176,11 @@ describe('helpers', () => {
     expect(isBotChallenge(503, {}, '<title>Attention Required! | Cloudflare</title>')).toBe(true);
     expect(isBotChallenge(403, {}, '<title>Forbidden</title>')).toBe(false);
     expect(isBotChallenge(200, {}, '<title>Just a moment</title>')).toBe(false);
+  });
+  it('recognizes challenge page text regardless of status', () => {
+    expect(looksLikeChallengePage('Just a moment...\n<html>')).toBe(false);
+    expect(looksLikeChallengePage('<title>Just a moment...</title>')).toBe(true);
+    expect(looksLikeChallengePage('x<div id="challenge-platform">')).toBe(true);
+    expect(looksLikeChallengePage('<title>Home</title><p>Welcome</p>')).toBe(false);
   });
 });

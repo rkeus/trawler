@@ -117,6 +117,10 @@ describe('resolveSettings', () => {
     expect(settings.memoryBodyLimitBytes).toBe(262144);
     expect(warnings).toHaveLength(3);
   });
+  it('has a challenge timeout', () => {
+    expect(DEFAULT_SETTINGS.challengeTimeoutMs).toBe(30000);
+    expect(resolveSettings({ challengeTimeoutMs: 1 }).settings.challengeTimeoutMs).toBe(5000);
+  });
 });
 
 describe('compileExcludePatterns', () => {
