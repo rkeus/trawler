@@ -36,4 +36,10 @@ describe('sanitizeSegment', () => {
     expect(out).toMatch(/-[0-9a-f]{8}\.png$/);
     expect(sanitizeSegment(long)).toBe(out);
   });
+  it('suffixes console and superscript device names', () => {
+    expect(sanitizeSegment('CONIN$')).toBe('CONIN$_');
+    expect(sanitizeSegment('conout$.log')).toBe('conout$_.log');
+    expect(sanitizeSegment('com¹.txt')).toBe('com¹_.txt');
+    expect(sanitizeSegment('LPT³')).toBe('LPT³_');
+  });
 });

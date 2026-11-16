@@ -76,3 +76,13 @@ export function kindFromUrl(url: string, contentType?: string): AssetKind {
   const fromPath = path.posix.extname(pathname).toLowerCase();
   return EXT_TO_KIND[fromPath] ?? 'other';
 }
+
+/** Server-side page extensions whose HTML output is saved as .html */
+export const SERVER_PAGE_EXTS: ReadonlySet<string> = new Set([
+  '.php', '.asp', '.aspx', '.jsp', '.cfm', '.cgi', '.shtml', '.xhtml',
+]);
+
+/** True for a lowercase path extension that looks like a page: none, .html/.htm, or a server page. */
+export function isPageExt(ext: string): boolean {
+  return ext === '' || ext === '.html' || ext === '.htm' || SERVER_PAGE_EXTS.has(ext);
+}

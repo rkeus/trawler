@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { shortHash } from '../../../../src/core/url/hash';
-import { extFromContentType, isHtmlContentType, kindFromUrl } from '../../../../src/core/url/mime';
+import { extFromContentType, isHtmlContentType, kindFromUrl, isPageExt, SERVER_PAGE_EXTS } from '../../../../src/core/url/mime';
 import { normalizeUrl } from '../../../../src/core/url/normalize';
 import { splitFragment, relativeHref } from '../../../../src/core/url/href';
 
@@ -43,6 +43,14 @@ describe('mime', () => {
     expect(kindFromUrl('https://x.com/data', 'application/json')).toBe('data');
     expect(kindFromUrl('https://x.com/x.php', 'text/html')).toBe('page');
     expect(kindFromUrl('https://x.com/x.png', 'application/x-unknown')).toBe('image');
+  });
+
+  it('classifies page extensions', () => {
+    for (const ext of ['', '.html', '.htm', '.php', '.asp', '.aspx', '.jsp', '.cfm', '.cgi', '.shtml', '.xhtml']) {
+      expect(isPageExt(ext)).toBe(true);
+    }
+    expect(isPageExt('.png')).toBe(false);
+    expect(SERVER_PAGE_EXTS.has('.html')).toBe(false);
   });
 });
 
