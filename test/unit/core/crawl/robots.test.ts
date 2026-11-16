@@ -34,4 +34,24 @@ describe('parseRobots', () => {
     expect(parseRobots('').isAllowed('/anything')).toBe(true);
     expect(ALLOW_ALL.isAllowed('/x')).toBe(true);
   });
+  it('matches pathological wildcard patterns in linear time', () => {
+    const r = parseRobots('User-agent: *\nDisallow: /' + '*a'.repeat(12) + '*b');
+    const t0 = performance.now();
+    expect(r.isAllowed('/' + 'a'.repeat(40))).toBe(true);
+    expect(r.isAllowed('/' + 'a'.repeat(40) + 'b')).toBe(false);
+    expect(performance.now() - t0).toBeLessThan(50);
+  });
+
+  it('normalizes percent-encoding and non-ASCII characters', () => {
+    expect(parseRobots('User-agent: *\nDisallow: /café/').isAllowed('/caf%C3%A9/x')).toBe(false);
+    expect(parseRobots('User-agent: *\nDisallow: /a%3cb').isAllowed('/a%3Cb')).toBe(false);
+  });
+
+  it('handles $ with wildcards and exact anchors', () => {
+    const r = parseRobots('User-agent: *\nDisallow: /exact$\nDisallow: /a*z$');
+    expect(r.isAllowed('/exact')).toBe(false);
+    expect(r.isAllowed('/exactly')).toBe(true);
+    expect(r.isAllowed('/abcz')).toBe(false);
+    expect(r.isAllowed('/abczq')).toBe(true);
+  });
 });
