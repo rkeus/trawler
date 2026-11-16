@@ -19,7 +19,11 @@ Design spec: `docs/superpowers/specs/2026-11-16-trawler-design.md`
     npm start -- --trawler-cli --url https://example.com/template/ --out ./mirror
     npm start -- --trawler-cli --kind analyze --url https://example.com/template/
 
-`npm start` builds the main process and launches Electron via `scripts/start.mjs`. That launcher removes `ELECTRON_RUN_AS_NODE`, which terminals inside VS Code set and which would make Electron run as plain Node. If you call `electron .` directly, unset that variable first.
+`npm start` builds the main process and launches Electron via `scripts/start.mjs`. That launcher:
+- removes `ELECTRON_RUN_AS_NODE`, which terminals inside VS Code set;
+- passes `--` before your options, because on Windows Electron refuses to start when a URL argument is followed by more arguments.
+
+If you call `electron .` directly, do both yourself, or write `--url=<url>`.
 
 Options:
 - `--kind download|analyze` (default `download`)
@@ -34,6 +38,8 @@ Exit codes:
 - `1` failed
 - `2` cancelled
 - `64` bad arguments
+
+Headless runs use a throwaway browser profile in the temp folder, and stale profiles are removed on later runs.
 
 ## Tests
 
