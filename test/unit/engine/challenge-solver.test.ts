@@ -48,4 +48,42 @@ describe('withChallengeSolver', () => {
     await expect(f.fetch('https://x.com/a')).rejects.toMatchObject({ status: 404 });
     expect(solves).toBe(0);
   });
+
+  it('retries requests that were already in flight when a solve succeeded, without solving again', async () => {
+    let solved = false;
+    let solves = 0;
+    const inner: Fetcher = {
+      async fetch(url: string) {
+        const startedSolved = solved;
+        const i = Number(url.split('/').pop());
+        await new Promise((r) => setTimeout(r, 10 + i * 15));
+        if (!startedSolved) throw new FetchError('Bot protection challenge (HTTP 403)', url, 'challenge', 403);
+        return ok(url);
+      },
+    };
+    const f = withChallengeSolver(
+      inner,
+      { solve: async () => { solves++; solved = true; return true; } },
+      new AbortController().signal,
+    );
+    const results = await Promise.all([0, 1, 2, 3, 4, 5, 6, 7].map((i) => f.fetch(`https://x.com/${i}`)));
+    expect(results.every((r) => r.status === 200)).toBe(true);
+    expect(solves).toBe(1);
+  });
+
+  it('reports cancellation instead of a challenge when cancelled during a solve', async () => {
+    const ac = new AbortController();
+    const inner = challengedUntilSolved();
+    const f = withChallengeSolver(
+      inner,
+      {
+        solve: (_url, signal) =>
+          new Promise<boolean>((_resolve, reject) => signal.addEventListener('abort', () => reject(new Error('aborted')))),
+      },
+      ac.signal,
+    );
+    const p = f.fetch('https://x.com/a');
+    setTimeout(() => ac.abort(), 20);
+    await expect(p).rejects.toMatchObject({ reason: 'aborted' });
+  });
 });

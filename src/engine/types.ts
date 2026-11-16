@@ -96,9 +96,12 @@ export interface CaptureOptions {
 /** A response observed by the browser while rendering a page. */
 export interface CapturedResponse {
   url: string;
+  /** URL the browser requested when it differs from `url` (redirects); lets the crawl alias it */
+  requestUrl?: string;
   status: number;
   /** text bodies are delivered as UTF-8; the capturer rewrites any charset parameter to utf-8 */
   contentType?: string;
+  /** the capturer omits bodies above memoryBodyLimitBytes (the crawl then fetches them with streaming) */
   body: Buffer;
   /** browser resource type, e.g. Document, Stylesheet, Script, Image, Font, XHR, Fetch */
   type: string;
@@ -108,6 +111,10 @@ export interface CaptureResult {
   url: string;
   finalUrl: string;
   status: number;
+  /** content type of the document as served; a non-HTML type means the link was a file, not a page */
+  contentType?: string;
+  /** raw served bytes of the document when the capturer has them (keeps legacy charsets intact) */
+  body?: Buffer;
   /** the document as served (decoded text; Trawler stores it as UTF-8) */
   html: string;
   /** document.documentElement.outerHTML after rendering */
@@ -120,7 +127,13 @@ export interface CaptureResult {
   failed: { url: string; status: number }[];
 }
 
-/** Renders pages in a real browser. Throws FetchError for load failures. */
+/**
+ * Renders pages in a real browser. Contract:
+ * - rejects promptly when `opts.signal` aborts;
+ * - throws FetchError for load failures (anything else is treated as a network failure of that page);
+ * - delivers text bodies as UTF-8 and sets their charset parameter to utf-8;
+ * - leaves out resource bodies above the memory body limit.
+ */
 export interface Capturer {
   capture(url: string, opts: CaptureOptions): Promise<CaptureResult>;
 }
