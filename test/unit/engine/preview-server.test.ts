@@ -1,14 +1,14 @@
 import { afterAll, beforeAll, describe, it, expect } from 'vitest';
 import fs from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 import { startPreviewServer, type PreviewServer } from '../../../src/engine/preview-server';
+import { makeTmpDir } from '../../helpers/tmp';
 
 let dir: string;
 let preview: PreviewServer;
 
 beforeAll(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), 'trawler-prev-'));
+  dir = await makeTmpDir('prev');
   await fs.mkdir(path.join(dir, 'blog'), { recursive: true });
   await fs.mkdir(path.join(dir, 'img'), { recursive: true });
   await fs.mkdir(path.join(dir, '_trawler'), { recursive: true });
@@ -58,7 +58,7 @@ describe('preview server', () => {
 
 describe('preview server with an encoded base path', () => {
   it('serves under a base path that contains percent-encoded characters', async () => {
-    const dir2 = await fs.mkdtemp(path.join(os.tmpdir(), 'trawler-prev2-'));
+    const dir2 = await makeTmpDir('prev2');
     await fs.writeFile(path.join(dir2, 'index.html'), 'ok');
     const p = await startPreviewServer({ root: dir2, basePath: '/my%20site/' });
     try {

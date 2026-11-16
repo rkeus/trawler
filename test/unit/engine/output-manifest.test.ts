@@ -14,8 +14,9 @@ import { collectErrors, writeManifest, readManifest, type Manifest } from '../..
 import type { CrawlResult } from '../../../src/engine/crawl';
 import { computeScope } from '../../../src/core';
 import { resolveSettings } from '../../../src/shared/settings';
+import { makeTmpDir } from '../../helpers/tmp';
 
-const tmp = () => fs.mkdtemp(path.join(os.tmpdir(), 'trawler-out-'));
+const tmp = () => makeTmpDir('out');
 
 function manifest(files: string[]): Manifest {
   return {

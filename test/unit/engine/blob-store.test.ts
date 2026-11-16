@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 import { BlobStore } from '../../../src/engine/blob-store';
+import { makeTmpDir } from '../../helpers/tmp';
 
 describe('BlobStore', () => {
   it('stores content-addressed bodies, dedupes, and clears', async () => {
-    const dir = path.join(await fs.mkdtemp(path.join(os.tmpdir(), 'trawler-blob-')), 'blobs');
+    const dir = path.join(await makeTmpDir('blob'), 'blobs');
     const store = new BlobStore(dir);
     await store.init();
     const a = await store.put(Buffer.from('abc'));

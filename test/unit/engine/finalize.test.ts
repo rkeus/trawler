@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 import { computeScope } from '../../../src/core';
 import { BlobStore } from '../../../src/engine/blob-store';
@@ -8,11 +7,12 @@ import { finalize } from '../../../src/engine/finalize';
 import { rewriteJsAbsoluteUrls } from '../../../src/engine/rewrite-js';
 import type { CrawlRecord, CrawlResult } from '../../../src/engine/crawl';
 import { resolveSettings } from '../../../src/shared/settings';
+import { makeTmpDir } from '../../helpers/tmp';
 
 const O = 'https://x.com';
 
 async function setup() {
-  const out = await fs.mkdtemp(path.join(os.tmpdir(), 'trawler-fin-'));
+  const out = await makeTmpDir('fin');
   const blobs = new BlobStore(path.join(out, '_trawler', 'blobs'));
   await blobs.init();
   const records = new Map<string, CrawlRecord>();

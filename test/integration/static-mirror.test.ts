@@ -1,11 +1,11 @@
 import { afterAll, beforeAll, describe, it, expect } from 'vitest';
 import fs from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 import { startFixtureServer, type FixtureServer } from '../helpers/fixture-server';
 import { cdnSite, staticSite } from '../fixtures/static-site';
 import { createStaticVerifier, runJob, startPreviewServer } from '../../src/engine';
 import { resolveSettings } from '../../src/shared/settings';
+import { makeTmpDir } from '../helpers/tmp';
 
 let cdn: FixtureServer;
 let site: FixtureServer;
@@ -22,7 +22,7 @@ const control = () => ({ signal: new AbortController().signal, emit: () => undef
 
 describe('static mirror end to end', () => {
   it('downloads the fixture template into a working local copy', async () => {
-    const out = await fs.mkdtemp(path.join(os.tmpdir(), 'trawler-e2e-'));
+    const out = await makeTmpDir('e2e');
     const settings = resolveSettings({ retries: 0 }).settings;
     const result = await runJob(
       { kind: 'download', seedUrl: `${site.url}/html/index.html`, outputDir: out, settings },

@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, describe, it, expect } from 'vitest';
 import fs from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 import { PNG_1X1, startFixtureServer, type FixtureServer } from '../../helpers/fixture-server';
 import { runJob, type JobRequest } from '../../../src/engine/job';
@@ -8,6 +7,7 @@ import { createStaticVerifier } from '../../../src/engine/static-verifier';
 import { writeManifest, type Manifest } from '../../../src/engine/manifest';
 import type { JobEvent, Verifier } from '../../../src/engine/types';
 import { resolveSettings } from '../../../src/shared/settings';
+import { makeTmpDir } from '../../helpers/tmp';
 
 let site: FixtureServer;
 beforeAll(async () => {
@@ -19,7 +19,7 @@ beforeAll(async () => {
 });
 afterAll(() => site.close());
 
-const tmp = () => fs.mkdtemp(path.join(os.tmpdir(), 'trawler-job-'));
+const tmp = () => makeTmpDir('job');
 
 async function go(
   req: Partial<JobRequest>,

@@ -10,6 +10,7 @@ import { createFetcher } from '../../../src/engine/fetcher';
 import { AdaptivePool } from '../../../src/engine/pool';
 import { BlobStore } from '../../../src/engine/blob-store';
 import { resolveSettings } from '../../../src/shared/settings';
+import { makeTmpDir } from '../../helpers/tmp';
 
 let cdn: FixtureServer;
 let site: FixtureServer;
@@ -37,7 +38,7 @@ afterAll(async () => {
 async function run(kind: 'analyze' | 'download', overrides: Record<string, unknown> = {}, seed?: string) {
   const { settings } = resolveSettings({ retries: 0, ...overrides });
   const signal = new AbortController().signal;
-  const blobStore = new BlobStore(path.join(await fs.mkdtemp(path.join(os.tmpdir(), 'trawler-crawl-')), 'blobs'));
+  const blobStore = new BlobStore(path.join(await makeTmpDir('crawl'), 'blobs'));
   await blobStore.init();
   const opts: CrawlOptions = {
     seedUrl: seed ?? `${site.url}/html/index.html`,

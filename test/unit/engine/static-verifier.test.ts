@@ -1,13 +1,13 @@
 import { afterAll, beforeAll, describe, it, expect } from 'vitest';
 import fs from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 import { startPreviewServer, type PreviewServer } from '../../../src/engine/preview-server';
 import { createStaticVerifier } from '../../../src/engine/static-verifier';
+import { makeTmpDir } from '../../helpers/tmp';
 
 let preview: PreviewServer;
 beforeAll(async () => {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'trawler-ver-'));
+  const dir = await makeTmpDir('ver');
   await fs.mkdir(path.join(dir, 'css'));
   await fs.writeFile(path.join(dir, 'index.html'), '<link rel="stylesheet" href="css/a.css"><img src="ok.png"><img src="https://cdn.example/x.png">');
   await fs.writeFile(path.join(dir, 'bad.html'), '<img src="missing.png">');
@@ -32,7 +32,7 @@ describe('createStaticVerifier', () => {
 
 describe('createStaticVerifier with redirects', () => {
   it('treats redirects (e.g. refs outside the base path) as missing', async () => {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'trawler-ver2-'));
+    const dir = await makeTmpDir('ver2');
     await fs.writeFile(path.join(dir, 'index.html'), '<img src="/other.png">');
     const p = await startPreviewServer({ root: dir, basePath: '/site/' });
     try {
