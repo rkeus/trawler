@@ -43,3 +43,16 @@ export function shouldCrawl(url: string, filter: CrawlFilter): boolean {
   }
   return true;
 }
+
+/**
+ * Folds a same-host URL onto the scope's scheme so http/https variants dedupe to one page.
+ * The crawler applies this to every discovered URL before frontier dedupe. Other hosts are returned unchanged.
+ */
+export function canonicalizeScheme(url: string, scope: Scope): string {
+  const u = new URL(url);
+  if (u.host !== scope.host) return url;
+  const protocol = new URL(scope.origin).protocol;
+  if (u.protocol === protocol) return url;
+  u.protocol = protocol;
+  return u.href;
+}

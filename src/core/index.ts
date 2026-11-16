@@ -13,7 +13,15 @@ export { walkHtml, type HtmlVisitor, type HtmlRefSite, type HtmlRefRole } from '
 export { extractHtmlRefs } from './html/extract';
 export { rewriteHtml, type RewriteHtmlOptions } from './html/rewrite';
 export { parseSrcset, stringifySrcset, type SrcsetCandidate } from './html/srcset';
-export { computeScope, inScope, isPageLike, shouldCrawl, type Scope, type CrawlFilter } from './crawl/scope';
+export {
+  computeScope,
+  inScope,
+  isPageLike,
+  shouldCrawl,
+  canonicalizeScheme,
+  type Scope,
+  type CrawlFilter,
+} from './crawl/scope';
 export { parseRobots, ALLOW_ALL, type RobotsRules } from './crawl/robots';
 export { Frontier, type FrontierItem, type FrontierOptions } from './crawl/frontier';
 export { analyzeStructure, type HtmlStructure } from './detect/structure';

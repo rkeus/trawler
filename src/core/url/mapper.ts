@@ -36,7 +36,7 @@ function addSuffix(relPath: string, hash: string): string {
 /**
  * Maps absolute URLs to unique, Windows-safe local paths (posix separators, relative to the output root).
  *
- * - Same host (scheme-insensitive) → below the output root; other hosts → vendor/<host>/.
+ * - Same host (scheme-insensitive, folded onto the origin's scheme) → below the output root; other hosts → vendor/<host>/.
  * - First URL to claim a path wins; later different URLs get a hash suffix. Callers must therefore call
  *   map() in a stable order (the finalizer sorts URLs) to get identical names on every run.
  * - Redirects: map() the final URL, then alias(originalUrl, finalUrl) so get(originalUrl) resolves.
@@ -50,31 +50,36 @@ export class UrlMapper {
   /** lowercased directory paths */
   private readonly dirs = new Set<string>();
   private readonly host: string;
+  private readonly protocol: string;
   private readonly rootPath: string;
   private readonly maxLen: number;
 
   constructor(opts: UrlMapperOptions) {
-    this.host = new URL(opts.origin).host;
+    const origin = new URL(opts.origin);
+    this.host = origin.host;
+    this.protocol = origin.protocol;
     this.rootPath = opts.rootPath.endsWith('/') ? opts.rootPath : `${opts.rootPath}/`;
     this.maxLen = opts.maxRelativeLength ?? 180;
   }
 
   /** Local path for a mapped URL, following redirect aliases. */
   get(url: string): string | undefined {
-    let current = url;
+    let current = this.canonical(url);
     for (let hop = 0; hop <= MAX_ALIAS_HOPS; hop++) {
       const direct = this.byUrl.get(current);
       if (direct !== undefined) return direct;
       const next = this.aliases.get(current);
       if (next === undefined) return undefined;
-      current = next;
+      current = this.canonical(next);
     }
     return undefined;
   }
 
   /** Records that `fromUrl` redirected to `toUrl`. */
   alias(fromUrl: string, toUrl: string): void {
-    if (fromUrl !== toUrl) this.aliases.set(fromUrl, toUrl);
+    const from = this.canonical(fromUrl);
+    const to = this.canonical(toUrl);
+    if (from !== to) this.aliases.set(from, to);
   }
 
   entries(): IterableIterator<[string, string]> {
@@ -92,10 +97,13 @@ export class UrlMapper {
     if (!dir.startsWith(this.rootPath)) return undefined;
     const rel = dir.slice(this.rootPath.length, -1);
     if (rel === '') return '';
-    return rel.split('/').map(safeDecode).map(sanitizeSegment).join('/');
+    const local = rel.split('/').map(safeDecode).map(sanitizeSegment).join('/');
+    // if a file already holds this path (e.g. "/docs" saved as file "docs"), it cannot serve as a directory
+    return this.files.has(local.toLowerCase()) ? undefined : local;
   }
 
   map(url: string, contentType?: string): string {
+    url = this.canonical(url);
     const existing = this.byUrl.get(url);
     if (existing !== undefined) return existing;
 
@@ -111,6 +119,14 @@ export class UrlMapper {
     }
     this.claim(candidate, url);
     return candidate;
+  }
+
+  /** Same-host URLs are keyed on the origin's scheme, so http/https variants share one entry. */
+  private canonical(url: string): string {
+    const u = new URL(url);
+    if (u.host !== this.host || u.protocol === this.protocol) return url;
+    u.protocol = this.protocol;
+    return u.href;
   }
 
   private candidate(url: string, contentType?: string): string {

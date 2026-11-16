@@ -130,4 +130,20 @@ describe('UrlMapper', () => {
     expect(m.localDir('https://y.com/html/')).toBeUndefined();
     expect(m.localDir('https://x.com/other/')).toBeUndefined();
   });
+
+  it('folds http/https variants of the same host into one entry', () => {
+    const m = mk();
+    expect(m.map('https://x.com/html/a.html', 'text/html')).toBe('a.html');
+    expect(m.map('http://x.com/html/a.html', 'text/html')).toBe('a.html');
+    expect(m.get('http://x.com/html/a.html')).toBe('a.html');
+    expect([...m.entries()]).toEqual([['https://x.com/html/a.html', 'a.html']]);
+    m.alias('http://x.com/html/old.html', 'http://x.com/html/a.html');
+    expect(m.get('https://x.com/html/old.html')).toBe('a.html');
+  });
+
+  it('does not return a local dir whose path is held by a file', () => {
+    const m = mk();
+    expect(m.map('https://x.com/html/docs')).toBe('docs');
+    expect(m.localDir('https://x.com/html/docs/')).toBeUndefined();
+  });
 });

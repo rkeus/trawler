@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeScope, inScope, isPageLike, shouldCrawl } from '../../../../src/core/crawl/scope';
+import { computeScope, inScope, isPageLike, shouldCrawl, canonicalizeScheme } from '../../../../src/core/crawl/scope';
 import { parseRobots } from '../../../../src/core/crawl/robots';
 
 describe('computeScope', () => {
@@ -51,5 +51,16 @@ describe('shouldCrawl', () => {
   });
   it('works without robots rules', () => {
     expect(shouldCrawl('https://x.com/html/a.html', { scope, exclude: [] })).toBe(true);
+  });
+});
+
+describe('canonicalizeScheme', () => {
+  const scope = computeScope('https://x.com/html/index.html');
+  it('folds same-host URLs onto the scope scheme', () => {
+    expect(canonicalizeScheme('http://x.com/html/a.html', scope)).toBe('https://x.com/html/a.html');
+    expect(canonicalizeScheme('https://x.com/html/a.html', scope)).toBe('https://x.com/html/a.html');
+  });
+  it('leaves other hosts alone', () => {
+    expect(canonicalizeScheme('http://cdn.com/a.js', scope)).toBe('http://cdn.com/a.js');
   });
 });
