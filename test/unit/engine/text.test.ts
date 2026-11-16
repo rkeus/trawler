@@ -56,6 +56,13 @@ describe('declareUtf8', () => {
     expect(declareUtf8('<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-2">')).toBe(
       '<meta http-equiv="Content-Type" content="text/html; charset=utf-8">',
     );
-    expect(declareUtf8('<p>no meta</p>')).toBe('<p>no meta</p>');
+    expect(declareUtf8('<p>no meta</p>')).toBe('<meta charset="utf-8"><p>no meta</p>');
+    expect(declareUtf8('<!doctype html><html><head><title>t</title></head>')).toBe(
+      '<!doctype html><html><head><meta charset="utf-8"><title>t</title></head>',
+    );
+    expect(declareUtf8('<!DOCTYPE html><html lang="sr"><body>x</body>')).toBe(
+      '<!DOCTYPE html><html lang="sr"><meta charset="utf-8"><body>x</body>',
+    );
+    expect(declareUtf8('<!doctype html><p>x</p>')).toBe('<!doctype html><meta charset="utf-8"><p>x</p>');
   });
 });

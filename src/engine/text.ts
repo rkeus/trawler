@@ -35,7 +35,22 @@ export function encodeBody(text: string, encoding: TextEncodingKind): Buffer {
   return Buffer.from(text, encoding);
 }
 
-/** Points the document's first charset declaration at UTF-8 (used when a page is stored as UTF-8 text). */
+const CHARSET_DECLARATION = /(<meta\b[^>]*?charset\s*=\s*["']?)([\w-]+)/i;
+const UTF8_META = '<meta charset="utf-8">';
+
+/**
+ * Makes a page stored as UTF-8 text say so: rewrites its first charset declaration to utf-8, or inserts
+ * <meta charset="utf-8"> right after <head>, else after <html>, else after the doctype (never before it,
+ * which would switch the page to quirks mode), else at the start.
+ */
 export function declareUtf8(html: string): string {
-  return html.replace(/(<meta\b[^>]*?charset\s*=\s*["']?)([\w-]+)/i, '$1utf-8');
+  if (CHARSET_DECLARATION.test(html)) return html.replace(CHARSET_DECLARATION, '$1utf-8');
+  for (const anchor of [/<head\b[^>]*>/i, /<html\b[^>]*>/i, /<!doctype[^>]*>/i]) {
+    const m = anchor.exec(html);
+    if (m) {
+      const at = m.index + m[0].length;
+      return html.slice(0, at) + UTF8_META + html.slice(at);
+    }
+  }
+  return UTF8_META + html;
 }
