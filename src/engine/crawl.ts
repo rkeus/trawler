@@ -50,6 +50,17 @@ export interface CrawlRecord {
   errorReason?: FetchFailureReason;
   /** a redirect landed on a URL that already has its own record */
   duplicate?: boolean;
+  /** deliberately not downloaded (not an error), e.g. a redirect outside the scope */
+  skipped?: string;
+}
+
+/** The start URL after its redirects; computed before the output folder is touched. */
+export interface ResolvedSeed {
+  /** normalized URL the user gave */
+  requested: string;
+  /** normalized final URL; defines the crawl scope */
+  start: string;
+  response: FetchedResource;
 }
 
 export interface CrawlOptions {
@@ -64,6 +75,8 @@ export interface CrawlOptions {
   blobStore?: BlobStore;
   /** product token matched against robots.txt groups, default "trawler" */
   robotsAgent?: string;
+  /** from resolveSeed(); fetched here when omitted */
+  seed?: ResolvedSeed;
 }
 
 export interface CrawlResult {
@@ -81,9 +94,28 @@ export interface CrawlResult {
 }
 
 export class SeedError extends Error {
-  constructor(message: string) {
-    super(message);
+  /** why the start URL failed (e.g. "challenge" lets the desktop runtime try its browser) */
+  readonly reason?: FetchFailureReason;
+
+  constructor(message: string, cause?: FetchError) {
+    super(message, cause ? { cause } : undefined);
     this.name = 'SeedError';
+    this.reason = cause?.reason;
+  }
+}
+
+/** Fetches the start URL. Cancellation is rethrown as the aborted FetchError, other failures as SeedError. */
+export async function resolveSeed(fetcher: Fetcher, seedUrl: string): Promise<ResolvedSeed> {
+  const requested = normalizeUrl(seedUrl);
+  if (!requested) throw new SeedError(`Invalid start URL: ${seedUrl}`);
+  try {
+    const response = await fetcher.fetch(requested);
+    return { requested, start: normalizeUrl(response.finalUrl) ?? requested, response };
+  } catch (err) {
+    if (err instanceof FetchError && err.reason !== 'aborted') {
+      throw new SeedError(`Could not load the start URL: ${err.message}`, err);
+    }
+    throw err;
   }
 }
 
@@ -91,19 +123,8 @@ export async function crawl(opts: CrawlOptions): Promise<CrawlResult> {
   const { settings, fetcher, pool, signal, emit } = opts;
   if (opts.kind === 'download' && !opts.blobStore) throw new Error('crawl: blobStore is required for downloads');
 
-  const seed = normalizeUrl(opts.seedUrl);
-  if (!seed) throw new SeedError(`Invalid start URL: ${opts.seedUrl}`);
-
-  // Fetch the seed first: its final URL (after redirects such as http→https or www.) defines the scope.
-  let seedRes: FetchedResource;
-  try {
-    seedRes = await fetcher.fetch(seed);
-  } catch (err) {
-    if (err instanceof FetchError) throw new SeedError(`Could not load the start URL: ${err.message}`);
-    throw err;
-  }
-  const start = normalizeUrl(seedRes.finalUrl) ?? seed;
-  const scope = computeScope(start);
+  const seed = opts.seed ?? (await resolveSeed(fetcher, opts.seedUrl));
+  const scope = computeScope(seed.start);
 
   const records = new Map<string, CrawlRecord>();
   /** final URL → record, so redirect targets are not fetched again */
@@ -114,6 +135,14 @@ export async function crawl(opts: CrawlOptions): Promise<CrawlResult> {
   const warnings: string[] = [];
   const counters: ProgressCounters = { pagesDone: 0, pagesQueued: 0, assetsDone: 0, assetsQueued: 0, bytes: 0, errors: 0 };
   const tasks: Promise<void>[] = [];
+  let outOfScopeRedirects = 0;
+
+  // `halt` stops new work on cancel or on the first fatal (non-network) error, e.g. a full disk.
+  const halt = new AbortController();
+  const onAbort = (): void => halt.abort();
+  if (signal.aborted) halt.abort();
+  else signal.addEventListener('abort', onAbort, { once: true });
+  let fatal: { error: unknown } | undefined;
 
   const robots = settings.respectRobotsTxt ? await loadRobots(fetcher, scope.origin, opts.robotsAgent ?? 'trawler') : ALLOW_ALL;
   const filter: CrawlFilter = { scope, exclude: compileExcludePatterns(settings.excludePatterns), robots };
@@ -123,6 +152,7 @@ export async function crawl(opts: CrawlOptions): Promise<CrawlResult> {
   const isSameHost = (u: string): boolean => new URL(u).host === scope.host;
   const progress = (): void => emit({ type: 'progress', counters: { ...counters } });
   const find = (url: string): CrawlRecord | undefined => records.get(url) ?? landed.get(url);
+  const halted = (): boolean => halt.signal.aborted;
   const newRecord = (url: string, kind: AssetKind, isPage: boolean, depth: number, referrer?: string): CrawlRecord => ({
     url,
     finalUrl: url,
@@ -138,24 +168,31 @@ export async function crawl(opts: CrawlOptions): Promise<CrawlResult> {
     if (referrer && !rec.referrers.includes(referrer)) rec.referrers.push(referrer);
   };
 
-  function enqueuePage(raw: string, depth: number, referrer?: string, force = false, prefetched?: FetchedResource): void {
-    if (signal.aborted) return;
+  function enqueuePage(
+    raw: string,
+    depth: number,
+    referrer?: string,
+    force = false,
+    prefetched?: FetchedResource,
+  ): CrawlRecord | undefined {
+    if (halted()) return undefined;
     const url = canon(raw);
     const existing = find(url);
     if (existing) {
       addReferrer(existing, referrer);
-      return;
+      return existing;
     }
-    if (!force && !shouldCrawl(url, filter)) return;
-    if (!frontier.add(url, depth)) return;
+    if (!force && !shouldCrawl(url, filter)) return undefined;
+    if (!frontier.add(url, depth)) return undefined;
     const rec = newRecord(url, 'page', true, depth, referrer);
     records.set(url, rec);
     counters.pagesQueued++;
-    tasks.push(pool.run(() => fetchPage(rec, prefetched)));
+    tasks.push(pool.run(() => fetchPage(rec, prefetched), halt.signal));
+    return rec;
   }
 
   function enqueueAsset(raw: string, kind: AssetKind, referrer: string): void {
-    if (signal.aborted) return;
+    if (halted()) return;
     const url = canon(raw);
     const existing = find(url);
     if (existing) {
@@ -177,7 +214,7 @@ export async function crawl(opts: CrawlOptions): Promise<CrawlResult> {
       counters.assetsDone++; // analyze only discovers non-CSS assets
       return;
     }
-    tasks.push(pool.run(() => fetchAsset(rec)));
+    tasks.push(pool.run(() => fetchAsset(rec), halt.signal));
   }
 
   /** Applies a response; returns false when the redirect target already has its own record. */
@@ -205,8 +242,13 @@ export async function crawl(opts: CrawlOptions): Promise<CrawlResult> {
     else if (keepForAnalyze) rec.body = body;
   }
 
+  /** Records a per-URL failure. Anything that is not a FetchError is fatal: it halts the whole crawl. */
   function fail(rec: CrawlRecord, err: unknown): void {
-    if (!(err instanceof FetchError)) throw err; // disk and programming errors abort the crawl
+    if (!(err instanceof FetchError)) {
+      if (!fatal) fatal = { error: err };
+      halt.abort();
+      return;
+    }
     rec.error = err.message;
     rec.errorReason = err.reason;
     rec.status = err.status ?? 0;
@@ -215,12 +257,17 @@ export async function crawl(opts: CrawlOptions): Promise<CrawlResult> {
     emit({ type: 'log', level: 'warn', message: err.message, url: rec.url });
   }
 
+  const cancelled = (url: string): FetchError => new FetchError('Cancelled', url, 'aborted');
+
   async function fetchPage(rec: CrawlRecord, prefetched?: FetchedResource): Promise<void> {
     try {
+      if (!prefetched && halted()) throw cancelled(rec.url);
       const res = prefetched ?? (await fetcher.fetch(rec.url));
       const final = canon(normalizeUrl(res.finalUrl) ?? rec.url);
       if (final !== rec.url && !inScope(final, scope)) {
-        throw new FetchError(`Redirected outside the crawl scope to ${final}`, rec.url, 'http', res.status);
+        rec.skipped = `Redirects outside the crawl scope to ${final}`;
+        outOfScopeRedirects++;
+        return;
       }
       if (!accept(rec, res, final)) return;
       if (!isHtmlContentType(res.contentType)) {
@@ -245,8 +292,13 @@ export async function crawl(opts: CrawlOptions): Promise<CrawlResult> {
 
   async function fetchAsset(rec: CrawlRecord): Promise<void> {
     try {
+      if (halted()) throw cancelled(rec.url);
       const res = await fetcher.fetch(rec.url);
       const final = canon(normalizeUrl(res.finalUrl) ?? rec.url);
+      if (!settings.downloadExternal && !isSameHost(final)) {
+        rec.skipped = `Redirects to an external host (${new URL(final).host})`;
+        return;
+      }
       if (!accept(rec, res, final)) return;
       const kind = kindFromUrl(rec.finalUrl, res.contentType);
       // keep a "css" hint when the server labels the stylesheet as plain text/data
@@ -265,24 +317,38 @@ export async function crawl(opts: CrawlOptions): Promise<CrawlResult> {
     }
   }
 
-  const startPath = new URL(start).pathname + new URL(start).search;
-  if (!robots.isAllowed(startPath)) {
+  const start = canon(seed.start);
+  const requested = canon(seed.requested);
+  const startUrl = new URL(start);
+  if (!robots.isAllowed(startUrl.pathname + startUrl.search)) {
     warnings.push('robots.txt disallows the start URL; it was fetched anyway because you asked for it.');
   }
-  if (start !== seed) aliases.set(seed, start);
-  enqueuePage(start, 0, undefined, true, seedRes);
+  const startRec = enqueuePage(start, 0, undefined, true, seed.response);
+  if (startRec && requested !== start) {
+    aliases.set(requested, start);
+    landed.set(requested, startRec); // a later link to the pre-redirect URL is not fetched again
+  }
+  // extra seeds follow the normal rules (scope, robots, excludes), only their depth is 0
   for (const extra of settings.extraSeeds) {
     const n = normalizeUrl(extra);
-    if (n) enqueuePage(n, 0, undefined, true);
+    if (n) enqueuePage(n, 0);
   }
 
-  while (tasks.length > 0) await Promise.all(tasks.splice(0));
+  try {
+    while (tasks.length > 0) await Promise.allSettled(tasks.splice(0));
+  } finally {
+    signal.removeEventListener('abort', onAbort);
+  }
+  if (fatal) throw fatal.error;
 
+  if (outOfScopeRedirects > 0) {
+    warnings.push(`${outOfScopeRedirects} link(s) redirect outside the crawl scope; they stay online links.`);
+  }
   if (frontier.limitReached) {
     warnings.push(`Page limit reached (${settings.maxPages}); some pages were not downloaded.`);
   }
   return {
-    seedUrl: canon(start),
+    seedUrl: start,
     scope,
     records,
     aliases,
