@@ -6,7 +6,10 @@ export type CssRefSource = 'css-url' | 'css-import';
 /** Receives the unescaped URL; returns a new URL string to replace it, or undefined to leave it. */
 export type CssVisitor = (raw: string, source: CssRefSource) => string | undefined;
 
-const CSS_ESCAPE = /\\(?:([0-9a-fA-F]{1,6})(?:\r\n|[ \t\n\r\f])?|(\r\n|[\n\r\f])|([\s\S]))/g;
+/** U+FFFD, written as a code point so the source stays ASCII-only. */
+const REPLACEMENT_CHAR = String.fromCodePoint(0xfffd);
+
+const CSS_ESCAPE =/\\(?:([0-9a-fA-F]{1,6})(?:\r\n|[ \t\n\r\f])?|(\r\n|[\n\r\f])|([\s\S]))/g;
 
 /** Decodes CSS escapes: "\28 " and "\(" → "(", backslash-newline → removed. */
 export function unescapeCss(s: string): string {
@@ -14,7 +17,7 @@ export function unescapeCss(s: string): string {
   return s.replace(CSS_ESCAPE, (_m, hex: string | undefined, nl: string | undefined, ch: string | undefined) => {
     if (hex) {
       const cp = parseInt(hex, 16);
-      return cp === 0 || cp > 0x10ffff || (cp >= 0xd800 && cp <= 0xdfff) ? '�' : String.fromCodePoint(cp);
+      return cp === 0 || cp > 0x10ffff || (cp >= 0xd800 && cp <= 0xdfff) ? REPLACEMENT_CHAR : String.fromCodePoint(cp);
     }
     if (nl) return '';
     return ch ?? '';
