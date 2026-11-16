@@ -1,36 +1,10 @@
-import fs from 'node:fs';
 import os from 'node:os';
-import path from 'node:path';
 import { app, BrowserWindow } from 'electron';
 import { parseCliArgs } from './cli';
 import { runCli } from './cli-runner';
+import { createProfile, sweepProfiles } from './profile-sweep';
 
 const EXIT_USAGE = 64;
-const PROFILE_PREFIX = 'trawler-cli-profile-';
-const STALE_PROFILE_MS = 60 * 60 * 1000;
-
-/**
- * Headless runs get a throwaway profile: they never touch the desktop app's profile (settings, history) or each
- * other's caches. Chromium keeps the folder locked until the process is gone, so stale ones are swept at the
- * next start instead of on exit.
- */
-function useThrowawayProfile(): void {
-  const tmp = os.tmpdir();
-  try {
-    for (const name of fs.readdirSync(tmp)) {
-      if (!name.startsWith(PROFILE_PREFIX)) continue;
-      const dir = path.join(tmp, name);
-      try {
-        if (Date.now() - fs.statSync(dir).mtimeMs > STALE_PROFILE_MS) fs.rmSync(dir, { recursive: true, force: true });
-      } catch {
-        // in use or already gone
-      }
-    }
-  } catch {
-    // temp folder not readable: nothing to sweep
-  }
-  app.setPath('userData', fs.mkdtempSync(path.join(tmp, PROFILE_PREFIX)));
-}
 
 /** In headless mode a crash must end the process, not open Electron's error dialog. */
 function exitOnCrash(): void {
@@ -51,7 +25,9 @@ if (parsed.kind === 'error') {
   process.stderr.write(`${parsed.message}\n`, () => process.exit(EXIT_USAGE));
 } else if (parsed.kind === 'cli') {
   exitOnCrash();
-  useThrowawayProfile();
+  // headless runs get a throwaway profile: they never touch the desktop app's profile or each other's caches
+  sweepProfiles(os.tmpdir(), 60 * 60 * 1000);
+  app.setPath('userData', createProfile(os.tmpdir()));
   app.disableHardwareAcceleration(); // headless runs need no GPU
   // hidden capture windows open and close all the time: never quit because of that
   app.on('window-all-closed', () => undefined);
