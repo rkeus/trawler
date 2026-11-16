@@ -15,3 +15,13 @@ export function relativeHref(fromFile: string, toFile: string): string {
     .map((s) => (s === '..' || s === '.' ? s : encodeURIComponent(s)))
     .join('/');
 }
+
+/** Relative, percent-encoded href from a local file to a local directory ('' = output root), always ending in "/". */
+export function relativeDirHref(fromFile: string, toDir: string): string {
+  const rel = path.posix.relative(path.posix.dirname(fromFile), toDir === '' ? '.' : toDir);
+  if (rel === '') return './';
+  return `${rel
+    .split('/')
+    .map((s) => (s === '..' || s === '.' ? s : encodeURIComponent(s)))
+    .join('/')}/`;
+}

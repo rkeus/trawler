@@ -9,8 +9,9 @@ describe('computeRootPath', () => {
     expect(computeRootPath('/html/', ['/html/index.html', '/assets/a.css'])).toBe('/');
     expect(computeRootPath('/a/b/', ['/a/b/x.html', '/a/c/y.css'])).toBe('/a/');
   });
-  it('handles a base path without trailing slash and empty input', () => {
-    expect(computeRootPath('/html', ['/html/x.html'])).toBe('/html/');
+  it('treats a base path without trailing slash as a file path', () => {
+    expect(computeRootPath('/html', ['/html/x.html'])).toBe('/');
+    expect(computeRootPath('/html/index.html', [])).toBe('/html/');
     expect(computeRootPath('/', [])).toBe('/');
   });
 });

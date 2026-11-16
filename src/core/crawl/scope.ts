@@ -1,8 +1,11 @@
 import path from 'node:path';
+import { isPageExt } from '../url/mime';
 import type { RobotsRules } from './robots';
 
 export interface Scope {
   origin: string;
+  /** host[:port] — scope and mapping are scheme-insensitive */
+  host: string;
   /** directory of the seed URL, always ends with "/" */
   basePath: string;
 }
@@ -13,24 +16,22 @@ export interface CrawlFilter {
   robots?: RobotsRules;
 }
 
-const PAGE_EXTS = new Set(['', '.html', '.htm', '.php', '.asp', '.aspx', '.jsp']);
-
 export function computeScope(seedUrl: string): Scope {
   const u = new URL(seedUrl);
   const p = u.pathname;
   const basePath = p.endsWith('/') ? p : p.slice(0, p.lastIndexOf('/') + 1);
-  return { origin: u.origin, basePath };
+  return { origin: u.origin, host: u.host, basePath };
 }
 
 export function inScope(url: string, scope: Scope): boolean {
   const u = new URL(url);
-  return u.origin === scope.origin && u.pathname.startsWith(scope.basePath);
+  return u.host === scope.host && u.pathname.startsWith(scope.basePath);
 }
 
 export function isPageLike(url: string): boolean {
   const pathname = new URL(url).pathname;
   if (pathname.endsWith('/')) return true;
-  return PAGE_EXTS.has(path.posix.extname(pathname).toLowerCase());
+  return isPageExt(path.posix.extname(pathname).toLowerCase());
 }
 
 export function shouldCrawl(url: string, filter: CrawlFilter): boolean {

@@ -5,11 +5,12 @@ function parentDir(dir: string): string {
 }
 
 /**
- * Smallest directory (ending in "/") that contains `basePath` and every same-host pathname given.
+ * Smallest directory (ending in "/") that contains the directory of `basePath` and every same-host pathname given.
  * Used as the local output root: "/html/" → files under /html/ land at the output root.
  */
 export function computeRootPath(basePath: string, pathnames: Iterable<string>): string {
-  let root = basePath.endsWith('/') ? basePath : `${basePath}/`;
+  // a base path without trailing slash is a file path: use its directory
+  let root = basePath.slice(0, basePath.lastIndexOf('/') + 1) || '/';
   for (const p of pathnames) {
     while (root !== '/' && !p.startsWith(root)) root = parentDir(root);
   }

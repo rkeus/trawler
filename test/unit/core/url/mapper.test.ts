@@ -51,7 +51,6 @@ describe('UrlMapper', () => {
     const m = mk();
     expect(m.map('https://cdn.example.com/lib/x.min.js')).toBe('vendor/cdn.example.com/lib/x.min.js');
     expect(m.map('http://localhost:8080/a.js')).toBe('vendor/localhost_8080/a.js');
-    expect(m.map('http://x.com/html/a.js')).toBe('vendor/x.com/html/a.js');
   });
 
   it('puts same-host files outside the root under _outside/', () => {
@@ -85,5 +84,50 @@ describe('UrlMapper', () => {
     const m = mk();
     m.map('https://x.com/html/a.css');
     expect([...m.entries()]).toEqual([['https://x.com/html/a.css', 'a.css']]);
+  });
+  it('treats the same host on another scheme as the same site', () => {
+    expect(mk().map('http://x.com/html/a.js')).toBe('a.js');
+  });
+
+  it('saves html with a dotted last segment as index.html in a folder', () => {
+    const m = mk();
+    expect(m.map('https://x.com/html/blog/release-1.2', 'text/html')).toBe('blog/release-1.2/index.html');
+    expect(m.map('https://x.com/html/u/john.doe', 'text/html')).toBe('u/john.doe/index.html');
+    expect(m.map('https://x.com/html/page.shtml', 'text/html')).toBe('page.html');
+  });
+
+  it('lets css/js content types override misleading extensions', () => {
+    const m = mk();
+    expect(m.map('https://x.com/html/wp/load-styles.php?c=1', 'text/css')).toBe('wp/load-styles.css');
+    expect(m.map('https://x.com/html/js/app.min', 'application/javascript')).toBe('js/app.min.js');
+    expect(m.map('https://x.com/html/js/mod.mjs', 'text/javascript')).toBe('js/mod.mjs');
+    expect(m.map('https://x.com/html/img/a.png', 'image/jpeg')).toBe('img/a.png');
+  });
+
+  it('sanitizes vendor host directory names', () => {
+    const m = mk();
+    expect(m.map('http://[::1]:8080/a.js')).toBe('vendor/[__1]_8080/a.js');
+    expect(m.map('https://nul.example.com/a.js')).toBe('vendor/nul_.example.com/a.js');
+    expect(m.map('https://cdn.com./b.js')).toBe('vendor/cdn.com/b.js');
+  });
+
+  it('resolves redirect aliases', () => {
+    const m = mk();
+    m.map('https://x.com/html/new.html', 'text/html');
+    m.alias('https://x.com/html/old.html', 'https://x.com/html/new.html');
+    m.alias('https://x.com/html/older.html', 'https://x.com/html/old.html');
+    expect(m.get('https://x.com/html/old.html')).toBe('new.html');
+    expect(m.get('https://x.com/html/older.html')).toBe('new.html');
+    expect(m.get('https://x.com/html/nope.html')).toBeUndefined();
+  });
+
+  it('maps directory URLs to local directories', () => {
+    const m = mk();
+    expect(m.localDir('https://x.com/html/')).toBe('');
+    expect(m.localDir('https://x.com/html/sub/')).toBe('sub');
+    expect(m.localDir('https://x.com/html/sub/page.html')).toBe('sub');
+    expect(m.localDir('https://x.com/html/my%20dir/')).toBe('my dir');
+    expect(m.localDir('https://y.com/html/')).toBeUndefined();
+    expect(m.localDir('https://x.com/other/')).toBeUndefined();
   });
 });

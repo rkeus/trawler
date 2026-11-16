@@ -4,10 +4,10 @@ import { parseRobots } from '../../../../src/core/crawl/robots';
 
 describe('computeScope', () => {
   it('uses the seed directory as base path', () => {
-    expect(computeScope('https://x.com/html/index.html')).toEqual({ origin: 'https://x.com', basePath: '/html/' });
-    expect(computeScope('https://x.com/html/')).toEqual({ origin: 'https://x.com', basePath: '/html/' });
-    expect(computeScope('https://x.com')).toEqual({ origin: 'https://x.com', basePath: '/' });
-    expect(computeScope('https://x.com/html')).toEqual({ origin: 'https://x.com', basePath: '/' });
+    expect(computeScope('https://x.com/html/index.html')).toEqual({ origin: 'https://x.com', host: 'x.com', basePath: '/html/' });
+    expect(computeScope('https://x.com/html/')).toEqual({ origin: 'https://x.com', host: 'x.com', basePath: '/html/' });
+    expect(computeScope('https://x.com')).toEqual({ origin: 'https://x.com', host: 'x.com', basePath: '/' });
+    expect(computeScope('https://x.com/html')).toEqual({ origin: 'https://x.com', host: 'x.com', basePath: '/' });
   });
 });
 
@@ -18,7 +18,7 @@ describe('inScope', () => {
     expect(inScope('https://x.com/html/sub/a.html', scope)).toBe(true);
     expect(inScope('https://x.com/other/a.html', scope)).toBe(false);
     expect(inScope('https://y.com/html/a.html', scope)).toBe(false);
-    expect(inScope('http://x.com/html/a.html', scope)).toBe(false);
+    expect(inScope('http://x.com/html/a.html', scope)).toBe(true);
   });
 });
 
@@ -29,6 +29,7 @@ describe('isPageLike', () => {
     expect(isPageLike('https://x.com/a.html')).toBe(true);
     expect(isPageLike('https://x.com/a.htm')).toBe(true);
     expect(isPageLike('https://x.com/a.PHP')).toBe(true);
+    expect(isPageLike('https://x.com/a.shtml')).toBe(true);
     expect(isPageLike('https://x.com/a.png')).toBe(false);
     expect(isPageLike('https://x.com/a.pdf')).toBe(false);
   });

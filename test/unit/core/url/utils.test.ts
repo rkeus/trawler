@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { shortHash } from '../../../../src/core/url/hash';
 import { extFromContentType, isHtmlContentType, kindFromUrl, isPageExt, SERVER_PAGE_EXTS } from '../../../../src/core/url/mime';
 import { normalizeUrl } from '../../../../src/core/url/normalize';
-import { splitFragment, relativeHref } from '../../../../src/core/url/href';
+import { splitFragment, relativeHref, relativeDirHref } from '../../../../src/core/url/href';
 
 describe('shortHash', () => {
   it('returns the first n hex chars of sha1', () => {
@@ -94,5 +94,11 @@ describe('href', () => {
   });
   it('percent-encodes path segments', () => {
     expect(relativeHref('index.html', 'img/my photo.png')).toBe('img/my%20photo.png');
+  });
+  it('computes relative directory hrefs', () => {
+    expect(relativeDirHref('index.html', '')).toBe('./');
+    expect(relativeDirHref('blog/post.html', '')).toBe('../');
+    expect(relativeDirHref('index.html', 'sub dir')).toBe('sub%20dir/');
+    expect(relativeDirHref('a/b.html', 'a')).toBe('./');
   });
 });
