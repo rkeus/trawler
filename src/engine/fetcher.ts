@@ -8,7 +8,7 @@ export interface FetcherOptions {
   /** extra attempts after the first one */
   retries: number;
   signal: AbortSignal;
-  /** empty/undefined → use the fetch implementation's default */
+  /** empty/undefined: use the fetch implementation's default */
   userAgent?: string;
   /** called on 429/503 so the caller can reduce concurrency */
   onThrottle?: () => void;
