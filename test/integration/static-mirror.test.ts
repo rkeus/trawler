@@ -22,6 +22,7 @@ const control = () => ({ signal: new AbortController().signal, emit: () => undef
 
 describe('static mirror end to end', () => {
   it('downloads the fixture template into a working local copy', async () => {
+    const before = site.requests.length;
     const out = await makeTmpDir('e2e');
     const settings = resolveSettings({ retries: 0 }).settings;
     const result = await runJob(
@@ -64,7 +65,7 @@ describe('static mirror end to end', () => {
     expect(index).toContain(`href="${site.url}/html/private/secret.html"`);
     expect(index).toContain(`src="${site.url}/html/assets/img/missing.png"`);
     expect(index).toContain('data-bg="assets/img/lazy.png"');
-    expect(site.requests).not.toContain('/html/private/secret.html');
+    expect(site.requests.slice(before)).not.toContain('/html/private/secret.html');
 
     const css = await fs.readFile(path.join(out, 'html', 'assets', 'css', 'style.css'), 'utf8');
     expect(css).toContain('url("../fonts/icons.woff2")');

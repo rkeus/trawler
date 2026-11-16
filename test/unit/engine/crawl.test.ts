@@ -78,8 +78,9 @@ describe('crawl (download)', () => {
   });
 
   it('respects robots.txt and records errors and redirects', async () => {
+    const before = site.requests.length;
     const r = await run('download');
-    expect(site.requests).not.toContain('/html/private/secret.html');
+    expect(site.requests.slice(before)).not.toContain('/html/private/secret.html');
     const missing = r.records.get(`${site.url}/html/assets/img/missing.png`)!;
     expect(missing.status).toBe(404);
     expect(missing.error).toBe('HTTP 404');
