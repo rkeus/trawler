@@ -64,4 +64,12 @@ describe('Electron runtime edge cases', () => {
     expect(r.code, r.stderr).toBe(0);
     expect(r.result.verify.missing).toEqual([]);
   });
+
+  it('survives response headers with UTF-8 bytes', async () => {
+    const out = await makeTmpDir('edge');
+    const r = await runCli(['--url', `${edge.url}/u/`, '--out', out, '--mode', 'static', '--settings', fast]);
+    expect(r.code, r.stderr).toBe(0);
+    expect(r.result.status).toBe('done');
+    await expect(fs.stat(path.join(out, 'clanica.png'))).resolves.toBeDefined();
+  });
 });

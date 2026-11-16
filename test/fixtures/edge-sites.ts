@@ -28,5 +28,12 @@ export function edgeSites(origin: string): Routes {
         "<!doctype html><html><body><h1>Beacons</h1><script>navigator.sendBeacon('/b/collect', 'x');" +
         "fetch('/b/api/save', { method: 'POST', body: '{}' });</script></body></html>",
     },
+    // a header carrying raw UTF-8 bytes (Node writes latin1 strings byte-for-byte)
+    '/u/': { type: HTML, body: '<!doctype html><html><body><img src="/u/clanica.png"></body></html>' },
+    '/u/clanica.png': {
+      type: 'image/png',
+      body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64'),
+      headers: { 'content-disposition': `inline; filename="${Buffer.from('članica.png', 'utf8').toString('latin1')}"` },
+    },
   };
 }

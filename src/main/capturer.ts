@@ -116,6 +116,8 @@ async function captureOnce(ses: Session, url: string, o: CaptureOptions, opts: C
           maxTotalBufferSize: 256 * MB,
           maxResourceBufferSize: Math.min(Math.max(opts.maxBodyBytes * 2, MB), 128 * MB),
         });
+        // a service worker registered by an earlier page must not serve this capture (stale or app-shell HTML)
+        await wc.debugger.sendCommand('Network.setBypassServiceWorker', { bypass: true });
         await wc.debugger.sendCommand('Page.enable');
         await wc.debugger.sendCommand('Page.addScriptToEvaluateOnNewDocument', { source: NO_DIALOGS });
         return true;
