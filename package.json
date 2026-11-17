@@ -14,14 +14,13 @@
     "build": "npm run build:main && npm run build:renderer",
     "start": "npm run build && node scripts/start.mjs",
     "test:electron": "npm run build:main && vitest run -c vitest.electron.config.ts",
-    "test:e2e": "npm run build && vitest run -c vitest.e2e.config.ts"
+    "test:e2e": "npm run build && vitest run -c vitest.e2e.config.ts",
+    "make-icon": "node scripts/make-icon.mjs",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder",
+    "test:packaged": "npm run pack && vitest run -c vitest.packaged.config.ts"
   },
-  "dependencies": {
-    "parse5": "^8.1.1",
-    "postcss": "^8.5.33",
-    "postcss-safe-parser": "^7.1.0",
-    "postcss-value-parser": "^4.2.0"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.12",
@@ -30,13 +29,19 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.3.0",
     "electron": "^45.3.3",
+    "electron-builder": "^26.18.0",
     "esbuild": "^0.28.2",
     "jsdom": "^29.1.1",
+    "parse5": "^8.1.1",
     "playwright-core": "^1.65.1",
+    "postcss": "^8.5.33",
+    "postcss-safe-parser": "^7.1.0",
+    "postcss-value-parser": "^4.2.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "typescript": "^7.0.2",
     "vite": "^8.3.8",
     "vitest": "^5.1.0"
-  }
+  },
+  "author": "Trawler"
 }

@@ -1,0 +1,27 @@
+appId: app.trawler.desktop
+productName: Trawler
+copyright: Trawler
+directories:
+  output: release
+  buildResources: build
+files:
+  - package.json
+  - out/**
+  - "!out/**/*.map"
+# use the Electron that is already installed instead of downloading another copy
+electronDist: node_modules/electron/dist
+asar: true
+npmRebuild: false
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  artifactName: "Trawler-Setup-${version}.${ext}"
+portable:
+  artifactName: "Trawler-${version}-portable.${ext}"
