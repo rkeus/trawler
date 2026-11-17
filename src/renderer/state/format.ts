@@ -33,6 +33,21 @@ export function displayUrl(url: string): string {
   }
 }
 
+/**
+ * The folder that contains `dir` ("D:\trawler\travel\site" -> "D:\trawler\travel"), for opening the folder dialog
+ * next to the last used folder: every template gets its own folder, so its neighbours are what the user wants to see.
+ * A drive root keeps its backslash ("D:\"); undefined when there is no parent.
+ */
+export function parentDir(dir: string | undefined): string | undefined {
+  if (!dir) return undefined;
+  const trimmed = dir.replace(/[\\/]+$/, '');
+  const cut = Math.max(trimmed.lastIndexOf('\\'), trimmed.lastIndexOf('/'));
+  if (cut < 0) return undefined;
+  const parent = trimmed.slice(0, cut);
+  if (parent === '') return trimmed.startsWith('/') ? '/' : undefined;
+  return /^[a-z]:$/i.test(parent) ? `${parent}\\` : parent;
+}
+
 export interface ResultText {
   text: string;
   tone: 'ok' | 'warn' | 'err' | 'muted';

@@ -7,6 +7,7 @@ import { LogoMark } from '../components/Logo';
 import { Seg } from '../components/Seg';
 import { Switch } from '../components/Switch';
 import { useApp } from '../state/AppProvider';
+import { parentDir } from '../state/format';
 import { buildStartRequest } from '../state/start-request';
 import { useLauncher } from '../state/useLauncher';
 import { FolderPolicyDialog } from './FolderPolicyDialog';
@@ -41,7 +42,7 @@ export function StartScreen() {
 
   async function chooseFolder(): Promise<void> {
     try {
-      const dir = await api.chooseFolder(outputDir);
+      const dir = await api.chooseFolder(parentDir(outputDir));
       if (dir) setOutputDir(dir);
     } catch (err) {
       setError(errorText(err));

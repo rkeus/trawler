@@ -4,7 +4,7 @@ import { errorText } from '../api';
 import { Field } from '../components/Field';
 import { Tag } from '../components/Tag';
 import { useApp } from '../state/AppProvider';
-import { displayUrl } from '../state/format';
+import { displayUrl, parentDir } from '../state/format';
 import { FIELDS, parseFields, toDraft, type Draft } from '../state/settings-form';
 import { useLauncher } from '../state/useLauncher';
 import { FolderPolicyDialog } from './FolderPolicyDialog';
@@ -42,7 +42,7 @@ export function AnalysisScreen() {
 
   async function chooseFolder(): Promise<void> {
     try {
-      const dir = await api.chooseFolder(outputDir);
+      const dir = await api.chooseFolder(parentDir(outputDir));
       if (dir) setOutputDir(dir);
     } catch (err) {
       launcher.setError(errorText(err));

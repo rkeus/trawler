@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { describeResult, displayUrl, formatBytes, formatWhen } from '../../../src/renderer/state/format';
+import { describeResult, displayUrl, formatBytes, formatWhen, parentDir } from '../../../src/renderer/state/format';
 import { historyEntry } from '../../helpers/history-entry';
 
 describe('format', () => {
@@ -33,5 +33,16 @@ describe('format', () => {
     expect(describeResult({ ...base, kind: 'analyze', status: 'done', pagesFound: 48 })).toEqual({ text: '48 pages found', tone: 'muted' });
     expect(describeResult({ ...base, status: 'cancelled' })).toEqual({ text: 'cancelled', tone: 'warn' });
     expect(describeResult({ ...base, status: 'failed', error: 'HTTP 404' })).toEqual({ text: 'failed: HTTP 404', tone: 'err' });
+  });
+
+  it('finds the folder that contains a folder', () => {
+    expect(parentDir('D:\\trawler\\travel\\site')).toBe('D:\\trawler\\travel');
+    expect(parentDir('D:\\trawler\\travel\\site\\')).toBe('D:\\trawler\\travel');
+    expect(parentDir('D:\\site')).toBe('D:\\');
+    expect(parentDir('/home/me/site')).toBe('/home/me');
+    expect(parentDir('/site')).toBe('/');
+    expect(parentDir('D:\\')).toBeUndefined();
+    expect(parentDir('site')).toBeUndefined();
+    expect(parentDir(undefined)).toBeUndefined();
   });
 });

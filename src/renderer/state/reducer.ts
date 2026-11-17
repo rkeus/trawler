@@ -88,7 +88,9 @@ export function reducer(m: Model, a: Action): Model {
         nextLogId: 0,
       };
       const text = a.response.usesAnalysisCache ? 'Job started (reusing the pages of the last analysis)' : 'Job started';
-      return { ...m, job: addLog(view, a.at, 'info', text), finished: null, finishedErrors: [], screen: 'progress' };
+      // the main process remembers the folder too (app-state.json); keep this copy in step so the Start screen offers it again
+      const appState = a.request.outputDir && m.appState ? { ...m.appState, lastOutputDir: a.request.outputDir } : m.appState;
+      return { ...m, appState, job: addLog(view, a.at, 'info', text), finished: null, finishedErrors: [], screen: 'progress' };
     }
     case 'job-event': {
       const job = m.job;

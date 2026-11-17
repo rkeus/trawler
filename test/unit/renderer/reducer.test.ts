@@ -163,4 +163,19 @@ describe('reducer', () => {
     expect(m.finishedErrors).toHaveLength(MAX_FINISHED_ERRORS);
     expect(m.finishedErrors.at(-1)?.text).toBe(`e${MAX_FINISHED_ERRORS + 4}`);
   });
+
+  it('remembers the output folder of a started download for the next one', () => {
+    let m = loaded();
+    expect(m.appState?.lastOutputDir).toBeUndefined();
+    m = reducer(m, {
+      type: 'job-started',
+      request: { kind: 'download', seedUrl: 'https://example.com/', outputDir: 'D:\\trawler\\travel\\site' },
+      response: { jobId: 'j1', settings, warnings: [], usesAnalysisCache: false },
+      startedAt: '2026-11-17T10:00:00.000Z',
+      at: 1,
+    });
+    expect(m.appState?.lastOutputDir).toBe('D:\\trawler\\travel\\site');
+    m = reducer(m, { type: 'dismiss-finished' });
+    expect(m.appState?.lastOutputDir).toBe('D:\\trawler\\travel\\site');
+  });
 });

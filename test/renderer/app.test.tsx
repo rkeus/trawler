@@ -52,6 +52,15 @@ describe('Start screen', () => {
     expect(await screen.findByRole('button', { name: 'Cancel' })).toBeTruthy(); // the progress screen
   });
 
+  it('opens the folder dialog next to the last used folder', async () => {
+    const { fake, user } = await open((f) =>
+      f.api.getAppState.mockResolvedValue({ legalNoteAccepted: true, theme: 'dark', palette: 'ember', lastOutputDir: 'D:\\trawler\\travel\\site-1' }),
+    );
+    expect(await screen.findByText('D:\\trawler\\travel\\site-1')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Choose output folder' }));
+    expect(fake.api.chooseFolder).toHaveBeenCalledWith('D:\\trawler\\travel');
+  });
+
   it('asks what to do when the output folder is not empty', async () => {
     const { fake, user } = await open((f) => {
       f.api.chooseFolder.mockResolvedValue('D:\\out');
