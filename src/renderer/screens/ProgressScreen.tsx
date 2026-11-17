@@ -6,6 +6,7 @@ import { displayUrl, formatBytes } from '../state/format';
 import { useApp } from '../state/AppProvider';
 import type { JobView } from '../state/model';
 import { AnalysisScreen } from './AnalysisScreen';
+import { ResultScreen } from './ResultScreen';
 
 const DOWNLOAD_STEPS: JobPhase[] = ['detecting', 'crawling', 'rewriting', 'verifying', 'done'];
 const ANALYZE_STEPS: JobPhase[] = ['detecting', 'crawling', 'done'];
@@ -108,56 +109,9 @@ function Running({ job }: { job: JobView }) {
   );
 }
 
-const HEADINGS = { done: 'Done', done_with_errors: 'Done with errors', cancelled: 'Cancelled', failed: 'Failed' } as const;
-
-/** The result of the job that just ended. Plan 3b-2 replaces this with the Analysis and Done screens. */
-function Finished() {
-  const { model, dispatch } = useApp();
-  const { result } = model.finished!;
-  const c = result.counters;
-  return (
-    <>
-      <div className="glass hero">
-        <div>
-          <h1>{HEADINGS[result.status]}</h1>
-          <div className="hint">
-            {result.kind === 'analyze' ? 'Analysis' : 'Download'} - {result.mode === 'js' ? 'JS' : 'static'} mode
-          </div>
-        </div>
-      </div>
-      {result.error && (
-        <div className="glass notice err" role="alert">
-          {result.error}
-        </div>
-      )}
-      <div className="glass card nums">
-        <div className="num"><b>{c.pagesDone}</b><span>pages</span></div>
-        <div className="num"><b>{c.assetsDone}</b><span>assets</span></div>
-        <div className="num"><b>{formatBytes(c.bytes)}</b><span>size</span></div>
-        <div className="num"><b className={c.errors > 0 ? 'wn' : ''}>{c.errors}</b><span>errors</span></div>
-      </div>
-      {result.warnings.length > 0 && (
-        <div className="glass card" style={{ marginTop: 12 }}>
-          <div className="cap" style={{ marginTop: 0 }}>Warnings</div>
-          <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--muted)' }}>
-            {result.warnings.map((w, i) => (
-              <li key={i}>{w}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-      <div className="actions">
-        <button type="button" className="btn go" onClick={() => dispatch({ type: 'dismiss-finished' })}>
-          Back to start
-        </button>
-      </div>
-    </>
-  );
-}
-
 export function ProgressScreen() {
   const { model } = useApp();
   if (model.job) return <Running job={model.job} />;
-  if (model.finished) return model.finished.result.analysis ? <AnalysisScreen /> : <Finished />;
+  if (model.finished) return model.finished.result.analysis ? <AnalysisScreen /> : <ResultScreen />;
   return null;
 }

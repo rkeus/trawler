@@ -6,6 +6,8 @@ import { App } from '../../src/renderer/App';
 import { fakeApi } from '../helpers/fake-api';
 import { historyEntry } from '../helpers/history-entry';
 import { analysisResult } from '../helpers/analysis';
+import type { JobResult } from '../../src/engine';
+import type { JobFinishedMessage } from '../../src/shared/ipc';
 
 async function open(setup?: (f: ReturnType<typeof fakeApi>) => void) {
   const fake = fakeApi();
@@ -282,5 +284,80 @@ describe('Analysis screen', () => {
     });
     expect(await screen.findByRole('button', { name: 'Download with these settings' })).toBeTruthy();
     expect(screen.queryByText('HYBRID')).toBeNull();
+  });
+});
+
+describe('Done screen', () => {
+  const download = (over: Partial<JobResult> = {}): JobFinishedMessage => ({
+    jobId: 'd1',
+    result: {
+      kind: 'download',
+      status: 'done',
+      mode: 'js',
+      outputDir: 'D:\\out\\site',
+      counters: { pagesDone: 111, pagesQueued: 111, assetsDone: 482, assetsQueued: 482, bytes: 40265318, errors: 0 },
+      verify: { pagesChecked: 111, pagesOk: 111, missing: [] },
+      warnings: [],
+      ...over,
+    },
+  });
+
+  async function openDone(over: Partial<JobResult> = {}) {
+    return open((f) => f.api.lastFinishedJob.mockResolvedValue(download(over)));
+  }
+
+  it('summarizes a finished download', async () => {
+    await openDone();
+    expect(await screen.findByRole('heading', { name: 'Done' })).toBeTruthy();
+    expect(screen.getByText(/111\/111 pages verified, 0 missing files/)).toBeTruthy();
+    expect(screen.getByText('38 MB')).toBeTruthy();
+    expect(screen.getByText('D:\\out\\site')).toBeTruthy();
+  });
+
+  it('runs the preview, opens the folder and the report', async () => {
+    const { fake, user } = await openDone();
+    await user.click(await screen.findByRole('button', { name: 'Run preview' }));
+    expect(fake.api.startPreview).toHaveBeenCalledWith('D:\\out\\site');
+    await waitFor(() => expect(fake.api.openPreview).toHaveBeenCalled());
+    await user.click(screen.getByRole('button', { name: 'Open folder' }));
+    expect(fake.api.openFolder).toHaveBeenCalledWith('D:\\out\\site');
+    await user.click(screen.getByRole('button', { name: 'Open report' }));
+    expect(fake.api.openReport).toHaveBeenCalledWith('D:\\out\\site');
+  });
+
+  it('shows the error of a failed action', async () => {
+    const { fake, user } = await openDone();
+    fake.api.openReport.mockRejectedValueOnce(new Error('This folder has no Trawler report.'));
+    await user.click(await screen.findByRole('button', { name: 'Open report' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('This folder has no Trawler report.');
+  });
+
+  it('lists the missing files of the verification', async () => {
+    await openDone({
+      status: 'done_with_errors',
+      verify: { pagesChecked: 10, pagesOk: 9, missing: [{ page: 'index.html', url: 'https://example.com/a.png', status: 404 }] },
+    });
+    expect(await screen.findByRole('heading', { name: 'Done with errors' })).toBeTruthy();
+    expect(screen.getByText(/index\.html/)).toBeTruthy();
+    expect(screen.getByText(/https:\/\/example\.com\/a\.png \(HTTP 404\)/)).toBeTruthy();
+  });
+
+  it('lists the errors of the job that just ended', async () => {
+    const { fake, user } = await open();
+    await user.type(await screen.findByLabelText('Template URL'), 'example.com');
+    await user.click(screen.getByRole('button', { name: 'Analyze' }));
+    await screen.findByRole('button', { name: 'Cancel' }); // job-1 runs
+    act(() => {
+      fake.emitEvent({ jobId: 'job-1', event: { type: 'log', level: 'error', message: 'HTTP 404', url: 'https://example.com/missing.png' } });
+      fake.emitFinished({ ...download({ status: 'done_with_errors' }), jobId: 'job-1' });
+    });
+    expect(await screen.findByRole('heading', { name: 'Done with errors' })).toBeTruthy();
+    expect(screen.getByText(/HTTP 404 https:\/\/example\.com\/missing\.png/)).toBeTruthy();
+  });
+
+  it('starts over with New download', async () => {
+    const { user } = await openDone();
+    await user.click(await screen.findByRole('button', { name: 'New download' }));
+    expect(await screen.findByRole('button', { name: 'Analyze' })).toBeTruthy();
   });
 });
