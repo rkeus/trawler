@@ -112,6 +112,6 @@ function Running({ job }: { job: JobView }) {
 export function ProgressScreen() {
   const { model } = useApp();
   if (model.job) return <Running job={model.job} />;
-  if (model.finished) return model.finished.result.analysis ? <AnalysisScreen /> : <ResultScreen />;
+  if (model.finished) return model.finished.result.analysis && model.finished.result.status === 'done' ?<AnalysisScreen /> : <ResultScreen />;
   return null;
 }

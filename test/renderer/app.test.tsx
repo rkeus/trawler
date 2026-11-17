@@ -275,6 +275,16 @@ describe('Analysis screen', () => {
     expect(await screen.findByRole('button', { name: 'Analyze' })).toBeTruthy();
   });
 
+  it('shows the result screen for a cancelled analysis', async () => {
+    await open((f) => {
+      const result = analysisResult();
+      result.status = 'cancelled';
+      f.api.lastFinishedJob.mockResolvedValue({ jobId: 'a1', result });
+    });
+    expect(await screen.findByRole('heading', { name: 'Cancelled' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Download with these settings' })).toBeNull();
+  });
+
   it('shows no verdict when the mode was chosen by hand', async () => {
     await open((f) => {
       const result = analysisResult();
