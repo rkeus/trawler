@@ -29,6 +29,7 @@ async function setup(over: Partial<AppServices> = {}) {
       },
       cancel: (id) => id === 'j1',
       current: () => undefined,
+      lastFinished: () => undefined,
     },
     preview: {
       start: async (outputDir) => ({ url: 'http://127.0.0.1:1234/html/', outputDir }),
@@ -70,6 +71,7 @@ describe('IPC handlers', () => {
         },
         cancel: () => false,
         current: () => undefined,
+        lastFinished: () => undefined,
       },
     });
     expect(await call('appInfo')).toEqual({ ok: true, value: expect.objectContaining({ version: '0.0.0' }) });
@@ -157,6 +159,7 @@ describe('IPC handlers', () => {
   it('returns null for "no running job" and "dialog cancelled"', async () => {
     const { call } = await setup();
     expect(await call('currentJob')).toEqual({ ok: true, value: null });
+    expect(await call('lastFinishedJob')).toEqual({ ok: true, value: null });
     expect(await call('chooseFolder')).toEqual({ ok: true, value: null });
   });
 

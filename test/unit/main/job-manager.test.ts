@@ -60,6 +60,20 @@ function harness(over: Partial<JobManagerDeps> = {}) {
 const seed = () => `${site.url}/html/index.html`;
 
 describe('JobManager', () => {
+  it('keeps the last finished job until the next one starts', async () => {
+    const h = harness();
+    expect(h.manager.lastFinished()).toBeUndefined();
+    const a = h.manager.start({ kind: 'analyze', seedUrl: seed() });
+    const msg = await h.done(a.jobId);
+    expect(h.manager.lastFinished()?.jobId).toBe(a.jobId);
+    expect(h.manager.lastFinished()?.result.status).toBe(msg.result.status);
+    const b = h.manager.start({ kind: 'analyze', seedUrl: `${slow.url}/slow/` });
+    expect(h.manager.lastFinished()).toBeUndefined();
+    h.manager.cancel(b.jobId);
+    await h.done(b.jobId);
+    expect(h.manager.lastFinished()?.result.status).toBe('cancelled');
+  });
+
   it('coalesces progress events and keeps their order relative to other events', async () => {
     const zero = { pagesDone: 0, pagesQueued: 0, assetsDone: 0, assetsQueued: 0, bytes: 0, errors: 0 };
     const run = async (_req: unknown, _ports: unknown, control: { emit: (e: any) => void }): Promise<JobResult> => {

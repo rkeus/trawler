@@ -120,6 +120,8 @@ export interface InvokeContract {
   startJob: { args: [request: StartJobRequest]; result: StartJobResponse };
   cancelJob: { args: [jobId: string]; result: boolean };
   currentJob: { args: []; result: RunningJob | null };
+  /** the job that finished last, until the next job starts (a UI that reloads at the wrong moment still gets the result) */
+  lastFinishedJob: { args: []; result: JobFinishedMessage | null };
   startPreview: { args: [outputDir: string]; result: PreviewInfo };
   stopPreview: { args: []; result: null };
   currentPreview: { args: []; result: PreviewInfo | null };
@@ -148,6 +150,7 @@ export const IPC = {
   startJob: 'job:start',
   cancelJob: 'job:cancel',
   currentJob: 'job:current',
+  lastFinishedJob: 'job:last-finished',
   startPreview: 'preview:start',
   stopPreview: 'preview:stop',
   currentPreview: 'preview:current',

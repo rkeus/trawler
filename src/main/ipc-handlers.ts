@@ -13,7 +13,7 @@ export interface AppServices {
   settings: Pick<SettingsStore, 'snapshot' | 'update' | 'reset'>;
   history: Pick<HistoryStore, 'list' | 'remove' | 'clear' | 'trim'>;
   appState: Pick<AppStateStore, 'get' | 'update'>;
-  jobs: Pick<JobManager, 'start' | 'cancel' | 'current'>;
+  jobs: Pick<JobManager, 'start' | 'cancel' | 'current' | 'lastFinished'>;
   preview: Pick<PreviewManager, 'start' | 'stop' | 'current'>;
   info: AppInfo;
   /** native folder picker; null when cancelled */
@@ -111,6 +111,7 @@ export function createHandlers(s: AppServices): Handlers {
     },
     cancelJob: async (jobId) => s.jobs.cancel(text(jobId, 'jobId')),
     currentJob: async () => s.jobs.current() ?? null,
+    lastFinishedJob: async () => s.jobs.lastFinished() ?? null,
     startPreview: async (dir) => s.preview.start(absolutePath(dir, 'outputDir')),
     stopPreview: async () => {
       await s.preview.stop();

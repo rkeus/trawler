@@ -105,6 +105,7 @@ export class JobManager {
   private active: ActiveJob | undefined;
   private analysis: AnalysisCache | undefined;
   private closed = false;
+  private last: JobFinishedMessage | undefined;
   private expiry: NodeJS.Timeout | undefined;
   private pendingProgress: { jobId: string; event: JobEvent } | undefined;
   private progressTimer: NodeJS.Timeout | undefined;
@@ -116,9 +117,15 @@ export class JobManager {
     return this.active ? structuredClone(this.active.info) : undefined;
   }
 
+  /** The job that finished last, until the next job starts. */
+  lastFinished(): JobFinishedMessage | undefined {
+    return this.last ? structuredClone(this.last) : undefined;
+  }
+
   start(request: StartJobRequest): StartJobResponse {
     if (this.closed) throw new Error('Trawler is shutting down.');
     if (this.active) throw new JobBusyError();
+    this.last = undefined;
     // app-level settings (history size, analysis cache, shutdown time) always come from the saved settings
     const { settings, warnings } = mergeSettings(this.deps.settings(), withoutAppSettings(request.settings));
     const now = (this.deps.now ?? Date.now)();
@@ -259,7 +266,9 @@ export class JobManager {
       // the history is best effort
     }
     this.active = undefined;
-    quietly(() => this.deps.onFinished({ jobId: info.jobId, result, ...(history ? { history } : {}) }));
+    const finished: JobFinishedMessage = { jobId: info.jobId, result, ...(history ? { history } : {}) };
+    this.last = finished;
+    quietly(() => this.deps.onFinished(finished));
   }
 
   private forward(info: RunningJob, event: JobEvent): void {
