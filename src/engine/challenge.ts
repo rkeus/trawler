@@ -21,7 +21,8 @@ export function isChallengeInterstitial(text: string): boolean {
 /** Detects bot-protection interstitials (Cloudflare and similar) served instead of real content. */
 export function isBotChallenge(status: number, headers: Record<string, string>, bodyStart: string): boolean {
   if ((headers['cf-mitigated'] ?? '').toLowerCase() === 'challenge') return true;
-  if (status !== 403 && status !== 429 && status !== 503) return false;
+  // 429 is a rate limit (Cloudflare serves its "Attention Required" page for it too): no browser can pass it, only slowing down helps
+  if (status !== 403 && status !== 503) return false;
   return looksLikeChallengePage(bodyStart);
 }
 

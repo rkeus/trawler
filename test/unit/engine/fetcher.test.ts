@@ -175,6 +175,8 @@ describe('helpers', () => {
     expect(isBotChallenge(200, { 'cf-mitigated': 'challenge' }, '')).toBe(true);
     expect(isBotChallenge(503, {}, '<title>Attention Required! | Cloudflare</title>')).toBe(true);
     expect(isBotChallenge(403, {}, '<title>Forbidden</title>')).toBe(false);
+    // a rate limit is not a challenge, even when it wears the challenge page
+    expect(isBotChallenge(429, {}, '<title>Attention Required! | Cloudflare</title>')).toBe(false);
     expect(isBotChallenge(200, {}, '<title>Just a moment</title>')).toBe(false);
   });
   it('recognizes challenge page text regardless of status', () => {
