@@ -189,6 +189,16 @@ describe('Settings screen', () => {
     expect(fake.api.updateSettings).not.toHaveBeenCalled();
   });
 
+  it('opens the detection group and says what to fix when a detection value is bad', async () => {
+    const { fake, user } = await openSettings();
+    await user.type(screen.getByLabelText('Static below'), 'x');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('Fix the marked fields.')).toBeTruthy();
+    expect(screen.getByText('Enter a number.')).toBeTruthy();
+    expect(screen.getByText('Detection (advanced)').closest('details')!.open).toBe(true);
+    expect(fake.api.updateSettings).not.toHaveBeenCalled();
+  });
+
   it('shows the warnings of the main process after a save', async () => {
     const { fake, user } = await openSettings();
     fake.api.updateSettings.mockResolvedValueOnce({ settings: fake.settings, defaults: fake.settings, warnings: ['maxPages: 0 out of range [1, 100000]; clamped to 1'] });

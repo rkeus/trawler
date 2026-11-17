@@ -34,6 +34,7 @@ export function SettingsScreen() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState<string[]>([]);
   const [failure, setFailure] = useState('');
+  const hasDetectionError = Object.keys(errors).some((k) => k.startsWith('detection.'));
   const dirty = JSON.stringify(draft) !== JSON.stringify(toDraft(saved));
 
   function set(key: string, value: string | boolean): void {
@@ -51,7 +52,7 @@ export function SettingsScreen() {
     const built = buildPatch(draft, saved);
     if (!built.ok) {
       setErrors(built.errors);
-      setNotes([]);
+      setNotes(['Fix the marked fields.']);
       return;
     }
     setErrors({});
@@ -121,7 +122,7 @@ export function SettingsScreen() {
           )}
           <div className="glass card" style={{ marginTop: 12 }}>
             {g.id === 'detection' ? (
-              <details className="group">
+              <details className="group" open={hasDetectionError || undefined}>
                 <summary>{g.title}</summary>
                 <div style={{ marginTop: 10 }}>
                   <GroupFields group={g.id} draft={draft} errors={errors} set={set} />

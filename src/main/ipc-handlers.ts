@@ -87,19 +87,22 @@ function startRequest(v: unknown): StartJobRequest {
 }
 
 /** The main-process side of every command (spec section 3). The renderer is not trusted: all input is checked. */
+/** The settings are already saved; a history that cannot be shortened becomes a warning, not a failed reply. */
+async function trimmed<T extends { settings: { historySize: number }; warnings: string[] }>(s: AppServices, snap: T): Promise<T> {
+  try {
+    await s.history.trim(snap.settings.historySize);
+    return snap;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { ...snap, warnings: [...snap.warnings, `The history could not be shortened: ${message}`] };
+  }
+}
+
 export function createHandlers(s: AppServices): Handlers {
   return {
     getSettings: async () => s.settings.snapshot(),
-    updateSettings: async (patch) => {
-      const snap = await s.settings.update(patch);
-      await s.history.trim(snap.settings.historySize);
-      return snap;
-    },
-    resetSettings: async () => {
-      const snap = await s.settings.reset();
-      await s.history.trim(snap.settings.historySize);
-      return snap;
-    },
+    updateSettings: async (patch) => trimmed(s, await s.settings.update(patch)),
+    resetSettings: async () => trimmed(s, await s.settings.reset()),
     listHistory: async () => s.history.list(),
     removeHistory: async (id) => s.history.remove(text(id, 'id')),
     clearHistory: async () => s.history.clear(),

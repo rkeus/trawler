@@ -150,6 +150,27 @@ describe('IPC handlers', () => {
     expect(history.list().map((e) => e.id)).toEqual(['3']);
   });
 
+  it('still answers when the history cannot be shortened after the settings were saved', async () => {
+    const real = new HistoryStore(HistoryStore.fileIn(await makeTmpDir('ipc-history')));
+    const history = {
+      list: real.list.bind(real),
+      remove: real.remove.bind(real),
+      clear: real.clear.bind(real),
+      trim: async () => {
+        throw new Error('disk full');
+      },
+    };
+    const { call } = await setup({ history });
+    const reply = await call('updateSettings', { maxDepth: 3 });
+    expect(reply.ok).toBe(true);
+    const snap = (reply as { value: { settings: { maxDepth: number }; warnings: string[] } }).value;
+    expect(snap.settings.maxDepth).toBe(3);
+    expect(snap.warnings.join(' ')).toContain('The history could not be shortened: disk full');
+    const reset = await call('resetSettings');
+    expect(reset.ok).toBe(true);
+    expect((reset as { value: { warnings: string[] } }).value.warnings.join(' ')).toContain('disk full');
+  });
+
   it('inspects folders and validates the path', async () => {
     const { call, dir } = await setup();
     expect(await call('inspectFolder', path.join(dir, 'new'))).toEqual({ ok: true, value: 'missing' });
