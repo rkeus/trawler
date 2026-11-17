@@ -27,7 +27,16 @@ export async function startDesktopApp(): Promise<void> {
   }
 
   let mainWindow: BrowserWindow | undefined;
+  // quitting cancels a running job (partial manifest written) and stops the preview first, within shutdownTimeoutMs
+  let quitting = false;
+  let shutdownDone = false;
+  // a second launch while this instance is shutting down: start again once the shutdown is done
+  let relaunchAfterQuit = false;
   app.on('second-instance', () => {
+    if (quitting) {
+      relaunchAfterQuit = true;
+      return;
+    }
     if (!mainWindow) return;
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.focus();
@@ -83,9 +92,6 @@ export async function startDesktopApp(): Promise<void> {
     (event) => event.sender === mainWindow?.webContents && isFileInside(event.senderFrame?.url ?? '', RENDERER_DIR),
   );
 
-  // quitting cancels a running job (partial manifest written) and stops the preview first, within shutdownTimeoutMs
-  let quitting = false;
-  let shutdownDone = false;
   app.on('before-quit', (event) => {
     if (shutdownDone) return;
     // every quit request while the shutdown is still running (window-all-closed, the window's 'closed') is held back too
@@ -97,6 +103,7 @@ export async function startDesktopApp(): Promise<void> {
       Promise.allSettled([jobs.shutdown(), preview.stop()]),
       sleep(settings.get().shutdownTimeoutMs).then(() => timedOut),
     ]).then((outcome) => {
+      if (relaunchAfterQuit) app.relaunch();
       if (outcome === timedOut) {
         process.stderr.write('shutdown timed out; exiting\n');
         app.exit(0);

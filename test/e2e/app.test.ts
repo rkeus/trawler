@@ -170,6 +170,11 @@ describe('Trawler desktop app (real Electron, API level)', () => {
       });
       // the hidden capture window is rendering the page (its image never arrives in time)
       await vi.waitFor(() => expect(hold.requests).toContain('/slow.png'), { timeout: 30000, interval: 200 });
+      // a hidden capture window is open next to the UI window: 'window-all-closed' alone would not quit
+      await vi.waitFor(
+        async () => expect(await run.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBeGreaterThan(1),
+        { timeout: 10000, interval: 200 },
+      );
       await run.app
         .evaluate(({ BrowserWindow }) => {
           BrowserWindow.getAllWindows().find((w) => w.isVisible())?.close();
