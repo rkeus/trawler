@@ -11,6 +11,15 @@ files:
 # use the Electron that is already installed instead of downloading another copy
 electronDist: node_modules/electron/dist
 asar: true
+# hardened fuses; inspect stays on for the packaged Playwright E2E, file: privileges stay on for the UI's module scripts
+electronFuses:
+  runAsNode: false
+  enableNodeOptionsEnvironmentVariable: false
+  onlyLoadAppFromAsar: true
+  enableEmbeddedAsarIntegrityValidation: true
+  enableCookieEncryption: true
+  enableNodeCliInspectArguments: true
+  grantFileProtocolExtraPrivileges: true
 npmRebuild: false
 win:
   target:
@@ -21,6 +30,7 @@ win:
 nsis:
   oneClick: false
   perMachine: false
+  packElevateHelper: false
   allowToChangeInstallationDirectory: true
   artifactName: "Trawler-Setup-${version}.${ext}"
 portable:
