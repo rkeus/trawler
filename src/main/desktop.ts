@@ -12,11 +12,12 @@ import { createElectronPorts } from './ports';
 import { PreviewManager } from './preview-manager';
 import { SettingsStore } from './settings-store';
 import { isFileInside } from './ui-trust';
+import { chooseUserDataDir } from './user-data';
 import { createMainWindow, RENDERER_DIR } from './window';
 
 /**
  * Starts the desktop app: stores in userData, the job and preview managers, IPC, and the window.
- * TRAWLER_USER_DATA overrides the profile folder (tests, portable use).
+ * TRAWLER_USER_DATA overrides the profile folder (tests); a portable exe keeps it in TrawlerData beside the exe.
  */
 export async function startDesktopApp(): Promise<void> {
   const override = process.env.TRAWLER_USER_DATA;
