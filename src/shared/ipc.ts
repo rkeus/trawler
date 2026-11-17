@@ -41,9 +41,18 @@ export interface HistoryEntry {
   settings: Settings;
 }
 
+export const THEMES = ['system', 'dark', 'light'] as const;
+export type ThemeChoice = (typeof THEMES)[number];
+
+/** Accent palettes (see docs/mockups/ui-mockup.html). Ember is the default. */
+export const PALETTES = ['ember', 'slate', 'moss', 'sand', 'clay', 'ink'] as const;
+export type PaletteName = (typeof PALETTES)[number];
+
 export interface AppState {
   /** the legal note (spec section 1) was shown and accepted */
   legalNoteAccepted: boolean;
+  theme: ThemeChoice;
+  palette: PaletteName;
   /** the last chosen output folder, offered next time */
   lastOutputDir?: string;
 }

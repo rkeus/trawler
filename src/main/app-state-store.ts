@@ -1,8 +1,8 @@
 import path from 'node:path';
-import type { AppState } from '../shared/ipc';
+import { PALETTES, THEMES, type AppState } from '../shared/ipc';
 import { isRecord, readJsonFile, writeJsonFile, WriteQueue } from './json-file';
 
-export const DEFAULT_APP_STATE: Readonly<AppState> = Object.freeze({ legalNoteAccepted: false });
+export const DEFAULT_APP_STATE: Readonly<AppState> = Object.freeze<AppState>({ legalNoteAccepted: false, theme: 'dark', palette: 'ember' });
 
 /** Applies the valid fields of `input` on top of `base`; anything else is ignored. */
 export function resolveAppState(base: AppState, input: unknown): AppState {
@@ -10,6 +10,8 @@ export function resolveAppState(base: AppState, input: unknown): AppState {
   if (!isRecord(input)) return out;
   if (typeof input.legalNoteAccepted === 'boolean') out.legalNoteAccepted = input.legalNoteAccepted;
   if (typeof input.lastOutputDir === 'string' && input.lastOutputDir.trim() !== '') out.lastOutputDir = input.lastOutputDir;
+  if (typeof input.theme === 'string' && (THEMES as readonly string[]).includes(input.theme)) out.theme = input.theme as AppState['theme'];
+  if (typeof input.palette === 'string' && (PALETTES as readonly string[]).includes(input.palette)) out.palette = input.palette as AppState['palette'];
   return out;
 }
 
