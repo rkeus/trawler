@@ -361,3 +361,14 @@ describe('Done screen', () => {
     expect(await screen.findByRole('button', { name: 'Analyze' })).toBeTruthy();
   });
 });
+
+describe('Startup warnings', () => {
+  it('shows what the stores reported at start, until dismissed', async () => {
+    const { user } = await open((f) =>
+      f.api.appInfo.mockResolvedValue({ version: '0.1.0', userDataDir: 'C:\data', startupWarnings: ['history.json was damaged and was moved to history.json.corrupt-1; using defaults'] }),
+    );
+    expect(await screen.findByText(/history\.json was damaged/)).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Dismiss' }));
+    expect(screen.queryByText(/history\.json was damaged/)).toBeNull();
+  });
+});

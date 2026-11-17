@@ -94,6 +94,19 @@ export function StartScreen() {
         </div>
       )}
 
+      {model.startupWarnings.length > 0 && (
+        <div className="glass notice" role="status">
+          <span className="grow">
+            {model.startupWarnings.map((w, i) => (
+              <div key={i}>{w}</div>
+            ))}
+          </span>
+          <button type="button" className="btn sm" onClick={() => dispatch({ type: 'dismiss-startup-warnings' })}>
+            Dismiss
+          </button>
+        </div>
+      )}
+
       {error && (
         <div className="glass notice err" role="alert">
           {error}
