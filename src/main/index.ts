@@ -1,7 +1,8 @@
 import os from 'node:os';
-import { app, BrowserWindow } from 'electron';
+import { app } from 'electron';
 import { parseCliArgs } from './cli';
 import { runCli } from './cli-runner';
+import { startDesktopApp } from './desktop';
 import { createProfile, sweepProfiles } from './profile-sweep';
 
 const EXIT_USAGE = 64;
@@ -41,14 +42,8 @@ if (parsed.kind === 'error') {
     app.exit(code);
   });
 } else {
-  app.on('window-all-closed', () => app.quit());
-  void app.whenReady().then(() => {
-    const win = new BrowserWindow({ width: 900, height: 600, title: 'Trawler' });
-    const page =
-      '<!doctype html><meta charset="utf-8"><title>Trawler</title>' +
-      '<body style="font-family:system-ui;padding:2rem"><h1>Trawler</h1>' +
-      '<p>The desktop interface arrives in Plan 3. Until then, use the command line:</p>' +
-      '<pre>npm start -- --trawler-cli --url=&lt;url&gt; --out=&lt;folder&gt;</pre></body>';
-    void win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(page)}`);
+  void startDesktopApp().catch((err: unknown) => {
+    process.stderr.write(`fatal: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`);
+    app.exit(1);
   });
 }
