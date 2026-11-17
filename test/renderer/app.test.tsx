@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from '../../src/renderer/App';
 import { fakeApi } from '../helpers/fake-api';
@@ -85,5 +85,65 @@ describe('Start screen', () => {
     const row = (await screen.findByText('example.com')).closest('li')!;
     await user.click(within(row).getByRole('button', { name: 'Remove' }));
     expect(fake.api.removeHistory).toHaveBeenCalledWith('h1');
+  });
+});
+
+describe('Progress screen', () => {
+  const ZERO = { pagesDone: 0, pagesQueued: 0, assetsDone: 0, assetsQueued: 0, bytes: 0, errors: 0 };
+
+  async function startAnalysis() {
+    const ctx = await open();
+    await ctx.user.type(await screen.findByLabelText('Template URL'), 'example.com/template/');
+    await ctx.user.click(screen.getByRole('button', { name: 'Analyze' }));
+    await screen.findByRole('button', { name: 'Cancel' });
+    return ctx;
+  }
+
+  it('follows a running job and shows how it ended', async () => {
+    const { fake, user } = await startAnalysis();
+    act(() => {
+      fake.emitEvent({ jobId: 'job-1', event: { type: 'phase', phase: 'crawling' } });
+      fake.emitEvent({ jobId: 'job-1', event: { type: 'progress', counters: { ...ZERO, pagesDone: 2, pagesQueued: 4, assetsDone: 7, bytes: 2048, errors: 1 } } });
+      fake.emitEvent({ jobId: 'job-1', event: { type: 'log', level: 'error', message: 'HTTP 404', url: 'https://example.com/missing.png' } });
+    });
+    expect(await screen.findByText('2 / 4')).toBeTruthy();
+    expect(screen.getByText('2.0 KB')).toBeTruthy();
+    await user.click(screen.getByRole('tab', { name: 'Errors (1)' }));
+    expect(screen.getByText(/HTTP 404/)).toBeTruthy();
+
+    act(() => {
+      fake.emitFinished({
+        jobId: 'job-1',
+        result: { kind: 'analyze', status: 'done', mode: 'static', counters: { ...ZERO, pagesDone: 4, pagesQueued: 4 }, warnings: ['robots.txt disallows /admin/'] },
+      });
+    });
+    expect(await screen.findByRole('heading', { name: 'Done' })).toBeTruthy();
+    expect(screen.getByText('robots.txt disallows /admin/')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Back to start' }));
+    expect(await screen.findByRole('button', { name: 'Analyze' })).toBeTruthy();
+  });
+
+  it('cancels the running job', async () => {
+    const { fake, user } = await startAnalysis();
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(fake.api.cancelJob).toHaveBeenCalledWith('job-1');
+  });
+
+  it('shows a failure with its message', async () => {
+    const { fake } = await startAnalysis();
+    act(() => {
+      fake.emitFinished({ jobId: 'job-1', result: { kind: 'analyze', status: 'failed', mode: 'static', counters: ZERO, warnings: [], error: 'HTTP 404' } });
+    });
+    expect(await screen.findByRole('heading', { name: 'Failed' })).toBeTruthy();
+    expect(screen.getByText('HTTP 404')).toBeTruthy();
+  });
+
+  it('reconnects to a job that is already running', async () => {
+    const { fake } = await open((f) =>
+      f.api.currentJob.mockResolvedValue({ jobId: 'job-7', kind: 'download', seedUrl: 'https://a.test/x/', startedAt: 's', phase: 'rewriting', counters: { ...ZERO, pagesDone: 3, pagesQueued: 3 } }),
+    );
+    expect(await screen.findByRole('button', { name: 'Cancel' })).toBeTruthy();
+    expect(screen.getByText('3 / 3')).toBeTruthy();
+    expect(fake.api.currentJob).toHaveBeenCalled();
   });
 });
