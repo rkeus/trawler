@@ -1,3 +1,4 @@
+import fs from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,13 +13,13 @@ export interface AppRun {
 }
 
 /** Starts the built desktop app with its own profile folder. Run `npm run build:main` first. */
-export async function launchApp(userDataDir: string): Promise<AppRun> {
+export async function launchApp(userDataDir: string, appDir: string = ROOT): Promise<AppRun> {
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) {
     if (value !== undefined && key !== 'ELECTRON_RUN_AS_NODE') env[key] = value;
   }
   env.TRAWLER_USER_DATA = userDataDir;
-  const app = await _electron.launch({ executablePath: ELECTRON, args: ['.'], cwd: ROOT, env });
+  const app = await _electron.launch({ executablePath: ELECTRON, args: [appDir], cwd: appDir, env });
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
   return { app, page };
@@ -50,4 +51,12 @@ export function runJobInApp(run: AppRun, request: unknown): Promise<{ start: any
       offDone();
     }
   }, request);
+}
+
+/** Copies the built app (package.json + out/) into `dir`, e.g. to run it from an unusual folder name. */
+export async function copyBuiltApp(dir: string): Promise<string> {
+  await fs.mkdir(dir, { recursive: true });
+  await fs.copyFile(path.join(ROOT, 'package.json'), path.join(dir, 'package.json'));
+  await fs.cp(path.join(ROOT, 'out'), path.join(dir, 'out'), { recursive: true });
+  return dir;
 }

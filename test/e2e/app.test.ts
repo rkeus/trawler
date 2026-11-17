@@ -1,20 +1,26 @@
-import { afterAll, beforeAll, describe, it, expect } from 'vitest';
+import { afterAll, beforeAll, describe, it, expect, vi } from 'vitest';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { startFixtureServer, type FixtureServer } from '../helpers/fixture-server';
+import { PNG_1X1, startFixtureServer, type FixtureServer } from '../helpers/fixture-server';
 import { makeTmpDir } from '../helpers/tmp';
 import { cdnSite, staticSite } from '../fixtures/static-site';
-import { api, launchApp, runJobInApp, type AppRun } from './launch';
+import { api, copyBuiltApp, launchApp, runJobInApp, type AppRun } from './launch';
 
 let cdn: FixtureServer;
 let site: FixtureServer;
 let slow: FixtureServer;
+let hold: FixtureServer;
 beforeAll(async () => {
+  hold = await startFixtureServer(() => ({
+    '/hold/': { type: 'text/html', body: '<!doctype html><title>hold</title><img src="/slow.png">' },
+    '/slow.png': { type: 'image/png', body: PNG_1X1, delayMs: 15000 },
+  }));
   cdn = await startFixtureServer(() => cdnSite());
   site = await startFixtureServer(() => staticSite(cdn.url));
   slow = await startFixtureServer(() => ({ '/slow/': { type: 'text/html', body: '<p>slow</p>', delayMs: 15000 } }));
 });
 afterAll(async () => {
+  await hold.close();
   await slow.close();
   await site.close();
   await cdn.close();
@@ -137,5 +143,44 @@ describe('Trawler desktop app (real Electron, API level)', () => {
       });
       expect(message).toBe('dir: expected an absolute path');
     });
+  });
+
+  it('works when installed in a folder whose name has ~, [ ] and spaces', async () => {
+    const appDir = await copyBuiltApp(path.join(await makeTmpDir('e2e-app'), 'TRAWLE~1 [x] app'));
+    const run = await launchApp(await makeTmpDir('e2e-profile'), appDir);
+    try {
+      const info = await api(run, 'appInfo');
+      expect(info.version).toBeTruthy();
+      expect((await api(run, 'getSettings')).settings.maxPages).toBe(500);
+    } finally {
+      await run.app.close();
+    }
+  });
+
+  it('closing the window during a JS-mode job cancels it and quits', async () => {
+    const profile = await makeTmpDir('e2e-profile');
+    const run = await launchApp(profile);
+    try {
+      const exited = new Promise<number | null>((resolve) => run.app.process().once('exit', (code) => resolve(code)));
+      await api(run, 'startJob', {
+        kind: 'download',
+        seedUrl: `${hold.url}/hold/`,
+        outputDir: await makeTmpDir('e2e-out'),
+        settings: { mode: 'js', retries: 0 },
+      });
+      // the hidden capture window is rendering the page (its image never arrives in time)
+      await vi.waitFor(() => expect(hold.requests).toContain('/slow.png'), { timeout: 30000, interval: 200 });
+      await run.app
+        .evaluate(({ BrowserWindow }) => {
+          BrowserWindow.getAllWindows().find((w) => w.isVisible())?.close();
+        })
+        .catch(() => undefined); // the app may already be going away
+      const outcome = await Promise.race([exited, new Promise((r) => setTimeout(() => r('still running'), 20000))]);
+      expect(outcome).not.toBe('still running');
+      const history = JSON.parse(await fs.readFile(path.join(profile, 'history.json'), 'utf8'));
+      expect(history.entries[0].status).toBe('cancelled');
+    } finally {
+      await run.app.close().catch(() => undefined);
+    }
   });
 });
