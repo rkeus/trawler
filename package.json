@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "build:main": "node scripts/build-main.mjs",
     "start": "npm run build:main && node scripts/start.mjs",
-    "test:electron": "npm run build:main && vitest run -c vitest.electron.config.ts"
+    "test:electron": "npm run build:main && vitest run -c vitest.electron.config.ts",
+    "test:e2e": "npm run build:main && vitest run -c vitest.e2e.config.ts"
   },
   "dependencies": {
     "parse5": "^8.1.1",
@@ -23,6 +24,7 @@
     "@types/node": "^26.6.6",
     "electron": "^45.3.3",
     "esbuild": "^0.28.2",
+    "playwright-core": "^1.65.1",
     "typescript": "^7.0.2",
     "vitest": "^5.1.0"
   }
