@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { readJsonFile, writeJsonFile, WriteQueue } from '../../../src/main/json-file';
@@ -48,5 +48,49 @@ describe('json-file', () => {
     await expect(b).rejects.toThrow('b failed');
     await c;
     expect(order).toEqual(['a', 'b', 'c']);
+  });
+
+  describe('writeJsonFile retries', () => {
+    const busy = (code: string) => async () => {
+      throw Object.assign(new Error(code), { code });
+    };
+
+    it('retries the rename when the file is briefly locked', async () => {
+      const dir = await makeTmpDir('json-retry');
+      const file = path.join(dir, 'a.json');
+      const spy = vi.spyOn(fs, 'rename');
+      try {
+        spy.mockImplementationOnce(busy('EBUSY')).mockImplementationOnce(busy('EPERM'));
+        await writeJsonFile(file, { ok: true }, { attempts: 5, delayMs: 1 });
+        expect(spy).toHaveBeenCalledTimes(3);
+        expect(JSON.parse(await fs.readFile(file, 'utf8'))).toEqual({ ok: true });
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('gives up after the attempts and leaves no temporary file', async () => {
+      const dir = await makeTmpDir('json-retry');
+      const file = path.join(dir, 'a.json');
+      const spy = vi.spyOn(fs, 'rename').mockImplementation(busy('EPERM'));
+      try {
+        await expect(writeJsonFile(file, { ok: true }, { attempts: 2, delayMs: 1 })).rejects.toThrow('EPERM');
+        expect(spy).toHaveBeenCalledTimes(2);
+      } finally {
+        spy.mockRestore();
+      }
+      expect(await fs.readdir(dir)).toEqual([]);
+    });
+
+    it('does not retry other errors', async () => {
+      const dir = await makeTmpDir('json-retry');
+      const spy = vi.spyOn(fs, 'rename').mockImplementation(busy('ENOSPC'));
+      try {
+        await expect(writeJsonFile(path.join(dir, 'a.json'), 1, { attempts: 5, delayMs: 1 })).rejects.toThrow('ENOSPC');
+        expect(spy).toHaveBeenCalledTimes(1);
+      } finally {
+        spy.mockRestore();
+      }
+    });
   });
 });

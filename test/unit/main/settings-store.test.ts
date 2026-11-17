@@ -109,4 +109,15 @@ describe('withoutAppSettings', () => {
     expect(withoutAppSettings(undefined)).toBeUndefined();
     expect(withoutAppSettings('x')).toBe('x');
   });
+
+  it('keeps the old settings in memory when the write fails', async () => {
+    const dir = await makeTmpDir('settings');
+    await fs.writeFile(path.join(dir, 'blocker'), 'x');
+    const store = new SettingsStore(path.join(dir, 'blocker', 'settings.json'));
+    const before = store.get();
+    await expect(store.update({ maxDepth: 9 })).rejects.toThrow();
+    expect(store.get()).toEqual(before);
+    await expect(store.reset()).rejects.toThrow();
+    expect(store.get()).toEqual(before);
+  });
 });

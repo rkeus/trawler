@@ -71,20 +71,22 @@ export class SettingsStore {
   }
 
   async update(patch: unknown): Promise<SettingsSnapshot> {
-    const { settings, warnings } = mergeSettings(this.current, patch);
-    this.current = settings;
-    await this.persist();
+    let warnings: string[] = [];
+    await this.queue.run(async () => {
+      const merged = mergeSettings(this.current, patch);
+      await writeJsonFile(this.file, settingsOverrides(merged.settings));
+      this.current = merged.settings;
+      warnings = merged.warnings;
+    });
     return this.snapshot(warnings);
   }
 
   async reset(): Promise<SettingsSnapshot> {
-    this.current = defaults();
-    await this.persist();
+    await this.queue.run(async () => {
+      const next = defaults();
+      await writeJsonFile(this.file, settingsOverrides(next));
+      this.current = next;
+    });
     return this.snapshot([]);
-  }
-
-  private persist(): Promise<void> {
-    const overrides = settingsOverrides(this.current);
-    return this.queue.run(() => writeJsonFile(this.file, overrides));
   }
 }

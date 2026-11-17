@@ -144,4 +144,12 @@ describe('HistoryStore', () => {
     store.list()[0]!.seedUrl = 'changed';
     expect(store.list()[0]!.seedUrl).toBe('https://example.com/');
   });
+
+  it('keeps the old list in memory when the write fails', async () => {
+    const dir = await makeTmpDir('history');
+    await fs.writeFile(path.join(dir, 'blocker'), 'x');
+    const store = new HistoryStore(path.join(dir, 'blocker', 'history.json'));
+    await expect(store.add(historyEntry('a'), 20)).rejects.toThrow();
+    expect(store.list()).toEqual([]);
+  });
 });

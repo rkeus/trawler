@@ -29,4 +29,21 @@ describe('AppStateStore', () => {
     await fs.writeFile(path.join(dir, 'app-state.json'), JSON.stringify({ legalNoteAccepted: true }));
     expect(await new AppStateStore(AppStateStore.fileIn(dir)).load()).toEqual({ ...DEFAULTS, legalNoteAccepted: true });
   });
+
+  it('keeps the old state in memory when the write fails', async () => {
+    const dir = await makeTmpDir('app-state');
+    await fs.writeFile(path.join(dir, 'blocker'), 'x');
+    const store = new AppStateStore(path.join(dir, 'blocker', 'app-state.json'));
+    await expect(store.update({ legalNoteAccepted: true })).rejects.toThrow();
+    expect(store.get().legalNoteAccepted).toBe(false);
+  });
+
+  it('reports a damaged file as a load warning', async () => {
+    const dir = await makeTmpDir('app-state');
+    const file = AppStateStore.fileIn(dir);
+    await fs.writeFile(file, '{not json');
+    const store = new AppStateStore(file);
+    await store.load();
+    expect(store.loadWarnings()[0]).toContain('app-state.json was damaged');
+  });
 });

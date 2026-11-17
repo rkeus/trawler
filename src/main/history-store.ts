@@ -82,35 +82,33 @@ export class HistoryStore {
   /** Adds an entry on top and keeps at most `limit`. Returns the stored entry, or undefined when history is off (0). */
   async add(entry: HistoryEntry, limit: number): Promise<HistoryEntry | undefined> {
     const max = Math.max(0, limit);
-    this.entries = [entry, ...this.entries.filter((e) => e.id !== entry.id)].slice(0, max);
-    await this.persist();
+    await this.commit((entries) => [structuredClone(entry), ...entries.filter((e) => e.id !== entry.id)].slice(0, max));
     return max > 0 ? structuredClone(entry) : undefined;
   }
 
   async remove(id: string): Promise<HistoryEntry[]> {
-    this.entries = this.entries.filter((e) => e.id !== id);
-    await this.persist();
+    await this.commit((entries) => entries.filter((e) => e.id !== id));
     return this.list();
   }
 
   async clear(): Promise<HistoryEntry[]> {
-    this.entries = [];
-    await this.persist();
+    await this.commit(() => []);
     return [];
   }
 
   /** Applies a smaller historySize right away. */
   async trim(limit: number): Promise<HistoryEntry[]> {
     const max = Math.max(0, limit);
-    if (this.entries.length > max) {
-      this.entries = this.entries.slice(0, max);
-      await this.persist();
-    }
+    if (this.entries.length > max) await this.commit((entries) => entries.slice(0, max));
     return this.list();
   }
 
-  private persist(): Promise<void> {
-    const data = { version: 1, entries: structuredClone(this.entries) };
-    return this.queue.run(() => writeJsonFile(this.file, data));
+  /** Writes the new list first; memory changes only when the write succeeded. */
+  private commit(compute: (entries: HistoryEntry[]) => HistoryEntry[]): Promise<void> {
+    return this.queue.run(async () => {
+      const next = compute(this.entries);
+      await writeJsonFile(this.file, { version: 1, entries: structuredClone(next) });
+      this.entries = next;
+    });
   }
 }

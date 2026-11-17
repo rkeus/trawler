@@ -37,13 +37,36 @@ export async function readJsonFile(file: string): Promise<JsonRead> {
   }
 }
 
+const RETRY_CODES: ReadonlySet<string> = new Set(['EPERM', 'EBUSY', 'EACCES']);
+
+export interface WriteOptions {
+  /** how many times the final rename is tried when the target is briefly locked (antivirus, indexer) */
+  attempts?: number;
+  /** wait before the next try is delayMs times the number of tries so far */
+  delayMs?: number;
+}
+
+async function renameWithRetry(from: string, to: string, { attempts = 5, delayMs = 40 }: WriteOptions): Promise<void> {
+  for (let tried = 1; ; tried++) {
+    try {
+      await fs.rename(from, to);
+      return;
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (tried >= attempts || !code || !RETRY_CODES.has(code)) throw err;
+      await new Promise((resolve) => setTimeout(resolve, delayMs * tried));
+    }
+  }
+}
+
 /** Writes JSON through a temporary file and a rename, so a crash never leaves a half-written file. */
-export async function writeJsonFile(file: string, value: unknown): Promise<void> {
+export async function writeJsonFile(file: string, value: unknown, options: WriteOptions = {}): Promise<void> {
   await fs.mkdir(path.dirname(file), { recursive: true });
   const tmp = `${file}.tmp-${process.pid}-${Math.random().toString(36).slice(2)}`;
-  await fs.writeFile(tmp, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+  await fs.writeFile(tmp, `${JSON.stringify(value, null, 2)}
+`, 'utf8');
   try {
-    await fs.rename(tmp, file);
+    await renameWithRetry(tmp, file, options);
   } catch (err) {
     await fs.rm(tmp, { force: true });
     throw err;

@@ -18,6 +18,7 @@ export function resolveAppState(base: AppState, input: unknown): AppState {
 /** Small UI facts that are not job settings (userData/app-state.json). */
 export class AppStateStore {
   private state: AppState = { ...DEFAULT_APP_STATE };
+  private warnings: string[] = [];
   private readonly queue = new WriteQueue();
 
   constructor(private readonly file: string) {}
@@ -27,9 +28,15 @@ export class AppStateStore {
   }
 
   async load(): Promise<AppState> {
-    const { value } = await readJsonFile(this.file);
+    const { value, movedTo } = await readJsonFile(this.file);
     this.state = resolveAppState({ ...DEFAULT_APP_STATE }, value);
+    this.warnings = movedTo ? [`app-state.json was damaged and was moved to ${movedTo}; using defaults`] : [];
     return this.get();
+  }
+
+  /** problems found while loading (a damaged file) */
+  loadWarnings(): string[] {
+    return [...this.warnings];
   }
 
   get(): AppState {
@@ -37,9 +44,11 @@ export class AppStateStore {
   }
 
   async update(patch: unknown): Promise<AppState> {
-    this.state = resolveAppState(this.state, patch);
-    const snapshot = this.get();
-    await this.queue.run(() => writeJsonFile(this.file, snapshot));
+    await this.queue.run(async () => {
+      const next = resolveAppState(this.state, patch);
+      await writeJsonFile(this.file, next);
+      this.state = next;
+    });
     return this.get();
   }
 }
