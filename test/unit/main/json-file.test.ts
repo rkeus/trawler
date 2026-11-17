@@ -19,6 +19,18 @@ describe('json-file', () => {
     expect(await fs.readdir(path.join(dir, 'sub'))).toEqual(['a.json']);
   });
 
+  it('leaves no temporary file when the temporary write fails half way', async () => {
+    const dir = await makeTmpDir('json');
+    const real = fs.writeFile.bind(fs);
+    const spy = vi.spyOn(fs, 'writeFile').mockImplementationOnce(async (target, data, opts) => {
+      await real(target, 'partial', opts);
+      throw Object.assign(new Error('no space left'), { code: 'ENOSPC' });
+    });
+    await expect(writeJsonFile(path.join(dir, 'a.json'), { a: 1 })).rejects.toThrow('no space left');
+    spy.mockRestore();
+    expect(await fs.readdir(dir)).toEqual([]);
+  });
+
   it('moves a damaged file aside and reports where', async () => {
     const dir = await makeTmpDir('json');
     const file = path.join(dir, 'b.json');

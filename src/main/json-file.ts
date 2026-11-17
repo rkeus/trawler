@@ -63,9 +63,8 @@ async function renameWithRetry(from: string, to: string, { attempts = 5, delayMs
 export async function writeJsonFile(file: string, value: unknown, options: WriteOptions = {}): Promise<void> {
   await fs.mkdir(path.dirname(file), { recursive: true });
   const tmp = `${file}.tmp-${process.pid}-${Math.random().toString(36).slice(2)}`;
-  await fs.writeFile(tmp, `${JSON.stringify(value, null, 2)}
-`, 'utf8');
   try {
+    await fs.writeFile(tmp, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
     await renameWithRetry(tmp, file, options);
   } catch (err) {
     await fs.rm(tmp, { force: true });
