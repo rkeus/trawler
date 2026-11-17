@@ -11,6 +11,8 @@ export class AppSessions {
   readonly job: Session;
   readonly verify: Session;
   private readonly defaultUserAgent: string;
+  /** the clean-up still running (it may outlive its time limit) */
+  private clearing: Promise<unknown> | undefined;
 
   constructor() {
     this.job = configureJobSession(session.fromPartition('trawler-app-job'));
@@ -23,6 +25,9 @@ export class AppSessions {
    * clean-up; `timedOut` tells the caller it was cut short (the job should still start).
    */
   async reset(userAgent: string, timeoutMs: number): Promise<{ timedOut: boolean }> {
+    // a clean-up that outlived its limit must not wipe the cookies of this job later: wait for it first
+    const previous = this.clearing;
+    const waited = previous ? await withTimeout(previous, timeoutMs) : undefined;
     const clearing = Promise.allSettled(
       [this.job, this.verify].flatMap((s) => [
         s.closeAllConnections(),
@@ -32,8 +37,12 @@ export class AppSessions {
         s.clearHostResolverCache(),
       ]),
     );
+    this.clearing = clearing;
+    void clearing.finally(() => {
+      if (this.clearing === clearing) this.clearing = undefined;
+    });
     const outcome = await withTimeout(clearing, timeoutMs);
     this.job.setUserAgent(userAgent || this.defaultUserAgent);
-    return { timedOut: outcome.timedOut };
+    return { timedOut: outcome.timedOut || waited?.timedOut === true };
   }
 }
