@@ -58,7 +58,8 @@ export async function startDesktopApp(): Promise<void> {
   const jobs = new JobManager({
     settings: () => settings.get(),
     createPorts: async (s) => {
-      await sessions.reset(s.userAgent);
+      const { timedOut } = await sessions.reset(s.userAgent, s.sessionResetTimeoutMs);
+      if (timedOut) process.stderr.write('emptying the browser sessions timed out; starting the job anyway\n');
       return createElectronPorts(s, sessions);
     },
     record: (entry) => history.add(entry, settings.get().historySize),

@@ -39,6 +39,7 @@ describe('resolveSettings', () => {
       analysisCacheTtlMs: 1800000,
       analysisCacheMaxBytes: 67108864,
       shutdownTimeoutMs: 10000,
+      sessionResetTimeoutMs: 15000,
       detection: {
         thresholds: { static: 0.3, js: 0.6 },
         weights: { emptyMount: 0.3, textRatio: 0.25, frameworkMarkers: 0.3, dataRequests: 0.1, moduleScripts: 0.05 },
@@ -54,7 +55,11 @@ describe('resolveSettings', () => {
   });
 
   it('lists the app-level settings that a single job cannot change', () => {
-    expect([...APP_SETTING_KEYS].sort()).toEqual(['analysisCacheMaxBytes', 'analysisCacheTtlMs', 'historySize', 'shutdownTimeoutMs']);
+    expect([...APP_SETTING_KEYS].sort()).toEqual(['analysisCacheMaxBytes', 'analysisCacheTtlMs', 'historySize', 'sessionResetTimeoutMs', 'shutdownTimeoutMs']);
+  });
+
+  it('clamps sessionResetTimeoutMs', () => {
+    expect(resolveSettings({ sessionResetTimeoutMs: 10 }).settings.sessionResetTimeoutMs).toBe(1000);
   });
 
   it('clamps the analysis cache settings', () => {

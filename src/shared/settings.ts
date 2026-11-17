@@ -38,6 +38,8 @@ export interface Settings {
   analysisCacheMaxBytes: number;
   /** desktop app: how long quitting waits for a running job to cancel and clean up before the app exits anyway */
   shutdownTimeoutMs: number;
+  /** desktop app: how long emptying the browser sessions before a job may take; the job starts anyway afterwards */
+  sessionResetTimeoutMs: number;
   detection: {
     thresholds: DetectionThresholds;
     weights: DetectionWeights;
@@ -72,6 +74,7 @@ const DEFAULTS: Settings = {
   analysisCacheTtlMs: 1800000,
   analysisCacheMaxBytes: 67108864,
   shutdownTimeoutMs: 10000,
+  sessionResetTimeoutMs: 15000,
   detection: {
     thresholds: { static: 0.3, js: 0.6 },
     weights: { emptyMount: 0.3, textRatio: 0.25, frameworkMarkers: 0.3, dataRequests: 0.1, moduleScripts: 0.05 },
@@ -98,6 +101,7 @@ export const APP_SETTING_KEYS = [
   'analysisCacheTtlMs',
   'analysisCacheMaxBytes',
   'shutdownTimeoutMs',
+  'sessionResetTimeoutMs',
 ] as const satisfies readonly (keyof Settings)[];
 
 export interface ResolvedSettings {
@@ -122,7 +126,8 @@ type IntKey =
   | 'historySize'
   | 'analysisCacheTtlMs'
   | 'analysisCacheMaxBytes'
-  | 'shutdownTimeoutMs';
+  | 'shutdownTimeoutMs'
+  | 'sessionResetTimeoutMs';
 
 const INT_RANGES: Record<IntKey, [number, number]> = {
   maxDepth: [0, 50],
@@ -142,6 +147,7 @@ const INT_RANGES: Record<IntKey, [number, number]> = {
   analysisCacheTtlMs: [0, 86400000],
   analysisCacheMaxBytes: [0, 1073741824],
   shutdownTimeoutMs: [1000, 120000],
+  sessionResetTimeoutMs: [1000, 120000],
 };
 
 type BoolKey = 'downloadExternal' | 'autoScroll' | 'respectRobotsTxt' | 'rewriteJsAbsoluteUrls' | 'verifyAfterDownload';
