@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { app, dialog, Menu, session, shell, type BrowserWindow, type OpenDialogOptions } from 'electron';
 import { sleep, TRAWLER_VERSION } from '../engine';
 import { IPC_EVENTS } from '../shared/ipc';
@@ -11,16 +12,17 @@ import { createElectronPorts } from './ports';
 import { PreviewManager } from './preview-manager';
 import { SettingsStore } from './settings-store';
 import { isFileInside } from './ui-trust';
-import { chooseUserDataDir } from './user-data';
+import { resolveUserData } from './user-data';
 import { createMainWindow, RENDERER_DIR } from './window';
 
 /**
  * Starts the desktop app: stores in userData, the job and preview managers, IPC, and the window.
- * TRAWLER_USER_DATA overrides the profile folder (tests); a portable exe keeps it in TrawlerData beside the exe.
+ * TRAWLER_USER_DATA overrides the profile folder (tests); our portable exe keeps it in TrawlerData beside the exe.
  */
 export async function startDesktopApp(): Promise<void> {
-  const userDataDir = chooseUserDataDir(process.env);
-  if (userDataDir) app.setPath('userData', userDataDir);
+  // the portable folder is used only when it is usable; otherwise Electron's default profile stays and a warning is shown
+  const profile = resolveUserData(process.env, fs);
+  if (profile.dir) app.setPath('userData', profile.dir);
   if (!app.requestSingleInstanceLock()) {
     app.quit();
     return;
@@ -52,7 +54,7 @@ export async function startDesktopApp(): Promise<void> {
   const history = new HistoryStore(HistoryStore.fileIn(userData));
   const appState = new AppStateStore(AppStateStore.fileIn(userData));
   const [settingsSnapshot, historyWarnings] = await Promise.all([settings.load(), history.load(), appState.load()]);
-  const startupWarnings = [...settingsSnapshot.warnings, ...historyWarnings, ...appState.loadWarnings()];
+  const startupWarnings = [...(profile.warning ? [profile.warning] : []), ...settingsSnapshot.warnings, ...historyWarnings, ...appState.loadWarnings()];
 
   const sessions = new AppSessions();
   const send = (channel: string, payload: unknown): void => sendTo(mainWindow?.webContents, channel, payload);

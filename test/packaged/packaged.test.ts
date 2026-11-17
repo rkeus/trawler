@@ -88,7 +88,7 @@ describe('Trawler packaged app (release/win-unpacked)', () => {
 
   it('keeps its data in TrawlerData beside a portable exe', async () => {
     const portableDir = await makeTmpDir('pk-portable');
-    const run = await launchPackaged(undefined, { PORTABLE_EXECUTABLE_DIR: portableDir });
+    const run = await launchPackaged(undefined, { PORTABLE_EXECUTABLE_DIR: portableDir, PORTABLE_EXECUTABLE_APP_FILENAME: 'trawler' });
     try {
       const info = await api(run, 'appInfo');
       expect(path.resolve(info.userDataDir)).toBe(path.resolve(portableDir, 'TrawlerData'));
