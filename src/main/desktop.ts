@@ -85,9 +85,12 @@ export async function startDesktopApp(): Promise<void> {
 
   // quitting cancels a running job (partial manifest written) and stops the preview first, within shutdownTimeoutMs
   let quitting = false;
+  let shutdownDone = false;
   app.on('before-quit', (event) => {
-    if (quitting) return;
+    if (shutdownDone) return;
+    // every quit request while the shutdown is still running (window-all-closed, the window's 'closed') is held back too
     event.preventDefault();
+    if (quitting) return;
     quitting = true;
     const timedOut = Symbol('timed out');
     void Promise.race([
@@ -98,6 +101,7 @@ export async function startDesktopApp(): Promise<void> {
         process.stderr.write('shutdown timed out; exiting\n');
         app.exit(0);
       } else {
+        shutdownDone = true;
         app.quit();
       }
     });
