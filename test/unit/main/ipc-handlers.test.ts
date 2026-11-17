@@ -163,6 +163,20 @@ describe('IPC handlers', () => {
     expect(await call('chooseFolder')).toEqual({ ok: true, value: null });
   });
 
+  it('refuses a network folder picked in the dialog, with the code "invalid"', async () => {
+    const { call } = await setup({ chooseFolder: async () => '\\\\server\\share\\templates' });
+    const reply = await call('chooseFolder');
+    expect(reply).toMatchObject({ ok: false, code: 'invalid' });
+    expect((reply as { error: string }).error).toContain('Network folders are not supported');
+  });
+
+  it('passes a local folder and a cancelled dialog through', async () => {
+    const local = await setup({ chooseFolder: async () => 'D:\\templates' });
+    expect(await local.call('chooseFolder')).toEqual({ ok: true, value: 'D:\\templates' });
+    const cancelled = await setup({ chooseFolder: async () => null });
+    expect(await cancelled.call('chooseFolder')).toEqual({ ok: true, value: null });
+  });
+
   it('rejects network and device paths', async () => {
     const { call, opened } = await setup();
     for (const p of ['\\\\host\\share', '//host/share', '\\\\?\\C:\\Windows']) {

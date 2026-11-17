@@ -41,10 +41,15 @@ function text(v: unknown, name: string): string {
   return v;
 }
 
+/** UNC (`\\server\share`) and device (`\\.\`) paths: the OS would contact other machines on a stat. */
+export function isNetworkPath(p: string): boolean {
+  return /^[\\/]{2}/.test(p);
+}
+
 function absolutePath(v: unknown, name: string): string {
   const s = text(v, name);
   // UNC and device paths would make the OS contact other machines (and send credentials) on a stat
-  if (/^[\\/]{2}/.test(s)) throw new InvalidInputError(`${name}: network and device paths are not supported`);
+  if (isNetworkPath(s)) throw new InvalidInputError(`${name}: network and device paths are not supported`);
   if (!path.isAbsolute(s)) throw new InvalidInputError(`${name}: expected an absolute path`);
   return path.resolve(s);
 }
@@ -100,8 +105,15 @@ export function createHandlers(s: AppServices): Handlers {
     clearHistory: async () => s.history.clear(),
     getAppState: async () => s.appState.get(),
     updateAppState: async (patch) => s.appState.update(patch),
-    chooseFolder: async (defaultPath) =>
-      s.chooseFolder(defaultPath === undefined || defaultPath === null ? undefined : absolutePath(defaultPath, 'defaultPath')),
+    chooseFolder: async (defaultPath) => {
+      const picked = await s.chooseFolder(
+        defaultPath === undefined || defaultPath === null ? undefined : absolutePath(defaultPath, 'defaultPath'),
+      );
+      if (picked && isNetworkPath(picked)) {
+        throw new InvalidInputError('Network folders are not supported. Choose a folder on a local drive.');
+      }
+      return picked;
+    },
     inspectFolder: async (dir) => inspectOutputDir(absolutePath(dir, 'dir')),
     startJob: async (request) => {
       const req = startRequest(request);
