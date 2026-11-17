@@ -23,6 +23,7 @@ const ICONS: Record<Screen, ReactElement> = {
 const ITEMS: { screen: Screen; label: string }[] = [
   { screen: 'start', label: 'Start' },
   { screen: 'progress', label: 'Progress' },
+  { screen: 'settings', label: 'Settings' },
 ];
 
 export function Rail() {

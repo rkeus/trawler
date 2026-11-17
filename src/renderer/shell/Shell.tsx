@@ -1,5 +1,6 @@
 import { useApp } from '../state/AppProvider';
 import { ProgressScreen } from '../screens/ProgressScreen';
+import { SettingsScreen } from '../screens/SettingsScreen';
 import { StartScreen } from '../screens/StartScreen';
 import { Rail } from './Rail';
 import { StatusBar } from './StatusBar';
@@ -23,7 +24,7 @@ export function Shell() {
       <Rail />
       <main className="stage">
         <section className="screen" key={model.screen}>
-          {model.screen === 'start' ? <StartScreen /> : <ProgressScreen />}
+          {model.screen === 'start' ? <StartScreen /> : model.screen === 'progress' ? <ProgressScreen /> : <SettingsScreen />}
         </section>
       </main>
       <StatusBar />

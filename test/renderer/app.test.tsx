@@ -147,3 +147,64 @@ describe('Progress screen', () => {
     expect(fake.api.currentJob).toHaveBeenCalled();
   });
 });
+
+describe('Settings screen', () => {
+  async function openSettings() {
+    const ctx = await open();
+    await ctx.user.click(await screen.findByRole('button', { name: 'Settings' }));
+    await screen.findByRole('heading', { name: 'Settings' });
+    return ctx;
+  }
+
+  it('saves only the changed values', async () => {
+    const { fake, user } = await openSettings();
+    const depth = screen.getByLabelText('Max depth');
+    await user.clear(depth);
+    await user.type(depth, '7');
+    await user.click(screen.getByRole('switch', { name: 'Respect robots.txt' }));
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(fake.api.updateSettings).toHaveBeenCalledWith({ maxDepth: 7, respectRobotsTxt: false });
+    expect(await screen.findByText('Saved.')).toBeTruthy();
+  });
+
+  it('keeps Save off until something changed', async () => {
+    const { user } = await openSettings();
+    const save = screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    await user.type(screen.getByLabelText('Max depth'), '1');
+    expect(save.disabled).toBe(false);
+  });
+
+  it('shows a bad value next to its field and saves nothing', async () => {
+    const { fake, user } = await openSettings();
+    const pages = screen.getByLabelText('Max pages');
+    await user.clear(pages);
+    await user.type(pages, 'many');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('Enter a whole number.')).toBeTruthy();
+    expect(fake.api.updateSettings).not.toHaveBeenCalled();
+  });
+
+  it('shows the warnings of the main process after a save', async () => {
+    const { fake, user } = await openSettings();
+    fake.api.updateSettings.mockResolvedValueOnce({ settings: fake.settings, defaults: fake.settings, warnings: ['maxPages: 0 out of range [1, 100000]; clamped to 1'] });
+    await user.type(screen.getByLabelText('Max pages'), '0');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText(/clamped to 1/)).toBeTruthy();
+  });
+
+  it('resets to the defaults', async () => {
+    const { fake, user } = await openSettings();
+    await user.click(screen.getByRole('button', { name: 'Reset to defaults' }));
+    expect(fake.api.resetSettings).toHaveBeenCalled();
+  });
+
+  it('changes the theme and the accent at once', async () => {
+    const { fake, user } = await openSettings();
+    await user.click(screen.getByRole('radio', { name: 'Light' }));
+    expect(fake.api.updateAppState).toHaveBeenCalledWith({ theme: 'light' });
+    await user.click(screen.getByRole('button', { name: 'Moss' }));
+    expect(fake.api.updateAppState).toHaveBeenCalledWith({ palette: 'moss' });
+    await waitFor(() => expect(document.documentElement.dataset.palette).toBe('moss'));
+  });
+});
