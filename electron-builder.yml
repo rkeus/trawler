@@ -29,6 +29,9 @@ win:
       arch: [x64]
 nsis:
   include: build/installer.nsh
+  installerSidebar: build/installer-sidebar.bmp
+  uninstallerSidebar: build/installer-sidebar.bmp
+  installerHeader: build/installer-header.bmp
   oneClick: false
   perMachine: false
   packElevateHelper: false
