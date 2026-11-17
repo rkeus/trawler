@@ -48,6 +48,15 @@ body { margin: 0; background: #05070b; font: 13px/1.4 "Segoe UI Variable", "Sego
 .glass { background: var(--glass); border: 1px solid var(--stroke); backdrop-filter: blur(18px) saturate(140%); -webkit-backdrop-filter: blur(18px) saturate(140%); border-radius: 12px; }
 
 .titlebar { grid-column: 1 / 3; display: flex; align-items: center; padding: 0 12px; gap: 8px; z-index: 2; color: var(--muted); font-size: 12px; }
+.logo-tile { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; color: var(--a1); margin-bottom: 8px;
+  background: rgba(var(--ar), .12); border: 1px solid rgba(var(--ar), .45); box-shadow: var(--glow); }
+.logo-tile svg { width: 28px; height: 28px; stroke-width: 2.4; }
+.brandhead { display: flex; align-items: center; gap: 16px; margin: 2px 0 14px; }
+.logo-big { width: 68px; height: 68px; border-radius: 18px; display: grid; place-items: center; color: var(--a1); flex: none;
+  background: rgba(var(--ar), .12); border: 1px solid rgba(var(--ar), .45); box-shadow: var(--glow); }
+.logo-big svg { width: 48px; height: 48px; stroke-width: 2.2; }
+.brandhead .name { font-size: 24px; font-weight: 700; letter-spacing: .14em; line-height: 1.1; }
+.brandhead .tag-line { color: var(--muted); font-size: 13px; margin-top: 4px; }
 .titlebar .brand { width: 16px; height: 16px; color: var(--a1); stroke-width: 3; }
 svg .f { fill: currentColor; stroke: none; }
 .welcome { display: grid; grid-template-columns: auto repeat(3, 1fr); gap: 10px; margin-top: 14px; align-items: stretch; }
@@ -175,6 +184,7 @@ ul.plain { margin: 0; padding-left: 16px; color: var(--muted); } ul.plain li { m
   <div class="titlebar"><svg class="brand" viewBox="1.75 -3 48 54"><path d="M16.75 12l-10 9 10 9"/><path d="M34.75 12l10 9-10 9"/><circle cx="30.6" cy="1.5" r="2"/><path d="M30.1 3.5L21.5 38a5.5 5.5 0 0010.6 2.6l1.4-4.6"/><path d="M33.5 36l-3.6 1.6"/></svg><b>TRAWLER</b><span>website template downloader</span><span class="sp"></span><i></i><i></i><i></i></div>
 
   <nav class="rail">
+    <div class="logo-tile" title="Trawler"><svg viewBox="1.75 -3 48 54"><path d="M16.75 12l-10 9 10 9"/><path d="M34.75 12l10 9-10 9"/><circle cx="30.6" cy="1.5" r="2"/><path d="M30.1 3.5L21.5 38a5.5 5.5 0 0010.6 2.6l1.4-4.6"/><path d="M33.5 36l-3.6 1.6"/></svg></div>
     <button class="on" data-s="start" title="Start"><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 19h14"/></svg></button>
     <button data-s="analysis" title="Analysis"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4-4"/></svg></button>
     <button data-s="progress" title="Progress"><svg viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></button>
@@ -186,6 +196,10 @@ ul.plain { margin: 0; padding-left: 16px; color: var(--muted); } ul.plain li { m
   <div class="stage">
     <!-- A -->
     <section class="screen on" id="start">
+      <div class="brandhead">
+        <div class="logo-big"><svg viewBox="1.75 -3 48 54"><path d="M16.75 12l-10 9 10 9"/><path d="M34.75 12l10 9-10 9"/><circle cx="30.6" cy="1.5" r="2"/><path d="M30.1 3.5L21.5 38a5.5 5.5 0 0010.6 2.6l1.4-4.6"/><path d="M33.5 36l-3.6 1.6"/></svg></div>
+        <div><div class="name">TRAWLER</div><div class="tag-line">Cast a URL. Haul back the whole template.</div></div>
+      </div>
       <div class="glass notice"><span>Use Trawler only on templates you own a license for, free templates, or your own sites.</span><span class="sp"></span><button class="btn sm">Got it</button></div>
       <div class="glass cmd">
         <svg viewBox="0 0 24 24"><path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1"/></svg>
@@ -199,7 +213,7 @@ ul.plain { margin: 0; padding-left: 16px; color: var(--muted); } ul.plain li { m
         <span class="glass chip">Depth <b>5</b> &middot; Pages <b>500</b> &middot; Parallel <b>6</b></span>
       </div>
       <div class="welcome">
-        <div class="glass intro"><b>Cast a URL. Haul back the whole template.</b><span>Trawler downloads a website template with all its pages, styles, scripts, images and fonts into a folder, in the same structure as on the server, so it works offline.</span></div>
+        <div class="glass intro"><b>What it does</b><span>Trawler downloads a website template with all its pages, styles, scripts, images and fonts into a folder, in the same structure as on the server, so it works offline.</span></div>
         <div class="glass step"><div class="k">1</div><b>Paste a link</b><span>The template's demo URL, e.g. its index.html.</span></div>
         <div class="glass step"><div class="k">2</div><b>Analyze</b><span>Trawler sounds it out: static HTML or built by JavaScript, how many pages, what it loads from elsewhere.</span></div>
         <div class="glass step"><div class="k">3</div><b>Download</b><span>Get a working local copy, checked page by page. Preview it in your browser.</span></div>
