@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, it, expect, vi } from 'vitest';
-import { runJob } from '../../../src/engine';
+import { FetchCache, runJob } from '../../../src/engine';
 import { JobBusyError, JobManager, type JobManagerDeps } from '../../../src/main/job-manager';
 import type { HistoryEntry, JobEventMessage, JobFinishedMessage } from '../../../src/shared/ipc';
 import { resolveSettings } from '../../../src/shared/settings';
@@ -254,5 +254,26 @@ describe('JobManager', () => {
     });
     const r = h.manager.start({ kind: 'analyze', seedUrl: seed() });
     expect((await h.done(r.jobId)).result.status).toBe('done');
+  });
+
+  it('frees a replaced or consumed analysis at once', async () => {
+    const clear = vi.spyOn(FetchCache.prototype, 'clear');
+    try {
+      const h = harness();
+      const a1 = h.manager.start({ kind: 'analyze', seedUrl: seed() });
+      await h.done(a1.jobId);
+      expect(clear).not.toHaveBeenCalled();
+      const a2 = h.manager.start({ kind: 'analyze', seedUrl: seed() });
+      expect(clear).toHaveBeenCalledTimes(1); // the first analysis, replaced
+      await h.done(a2.jobId);
+      const d = h.manager.start({ kind: 'download', seedUrl: seed(), outputDir: await makeTmpDir('jm') });
+      expect(d.usesAnalysisCache).toBe(true);
+      await h.done(d.jobId);
+      expect(clear).toHaveBeenCalledTimes(2); // the second analysis, consumed by the download
+      for (const cache of clear.mock.contexts as FetchCache[]) expect(cache.bytes).toBe(0);
+      expect(h.manager.analysisCache()).toBeUndefined();
+    } finally {
+      clear.mockRestore();
+    }
   });
 });

@@ -72,6 +72,8 @@ interface CachePlan {
   recording?: AnalysisCache;
   /** a download served from the previous analysis */
   serving: boolean;
+  /** the cache a serving download uses; freed when the download ends */
+  consumed?: FetchCache;
 }
 
 interface ActiveJob {
@@ -101,6 +103,7 @@ export class JobManager {
   private active: ActiveJob | undefined;
   private analysis: AnalysisCache | undefined;
   private closed = false;
+  private expiry: NodeJS.Timeout | undefined;
 
   constructor(private readonly deps: JobManagerDeps) {}
 
@@ -153,7 +156,7 @@ export class JobManager {
   private planCache(request: StartJobRequest, settings: Settings, now: number): CachePlan {
     const seedUrl = normalizeUrl(request.seedUrl);
     if (request.kind === 'analyze') {
-      this.analysis = undefined; // a new analysis replaces the previous one
+      this.dropAnalysis(); // a new analysis replaces the previous one
       if (!seedUrl || settings.analysisCacheTtlMs === 0 || settings.analysisCacheMaxBytes === 0) return { serving: false };
       const recording: AnalysisCache = {
         seedUrl,
@@ -165,6 +168,8 @@ export class JobManager {
       return { recording, decorate: (f) => recording.cache.record(f), serving: false };
     }
     const cached = this.analysis;
+    if (this.expiry) clearTimeout(this.expiry);
+    this.expiry = undefined;
     this.analysis = undefined; // reused at most once, then freed
     if (
       !cached ||
@@ -172,19 +177,27 @@ export class JobManager {
       cached.userAgent !== settings.userAgent ||
       now - cached.createdAt > cached.ttlMs
     ) {
+      cached?.cache.clear();
       return { serving: false };
     }
-    return { decorate: (f) => cached.cache.serve(f), serving: true };
+    return { decorate: (f) => cached.cache.serve(f), serving: true, consumed: cached.cache };
   }
 
   /** Keeps a finished analysis for the next download, and frees its memory when it expires. */
   private keepAnalysis(recording: AnalysisCache): void {
+    this.dropAnalysis();
     recording.createdAt = (this.deps.now ?? Date.now)();
     this.analysis = recording;
-    const timer = setTimeout(() => {
-      if (this.analysis === recording) this.analysis = undefined;
-    }, recording.ttlMs);
-    timer.unref();
+    this.expiry = setTimeout(() => this.dropAnalysis(), recording.ttlMs);
+    this.expiry.unref();
+  }
+
+  /** Frees the kept analysis now: clears its bodies and its expiry timer (whose closure would keep them alive). */
+  private dropAnalysis(): void {
+    if (this.expiry) clearTimeout(this.expiry);
+    this.expiry = undefined;
+    this.analysis?.cache.clear();
+    this.analysis = undefined;
   }
 
   private async execute(active: ActiveJob, request: StartJobRequest, settings: Settings, plan: CachePlan): Promise<void> {
@@ -226,6 +239,8 @@ export class JobManager {
     }
     await handle?.dispose().catch(() => undefined);
     if (plan.recording && result.status === 'done') this.keepAnalysis(plan.recording);
+    else plan.recording?.cache.clear(); // a cancelled or failed analysis is not kept
+    plan.consumed?.clear();
 
     const finishedAt = new Date((this.deps.now ?? Date.now)()).toISOString();
     let history: HistoryEntry | undefined;
