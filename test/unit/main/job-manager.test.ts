@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, it, expect, vi } from 'vitest';
+import { runJob } from '../../../src/engine';
 import { JobBusyError, JobManager, type JobManagerDeps } from '../../../src/main/job-manager';
 import type { HistoryEntry, JobEventMessage, JobFinishedMessage } from '../../../src/shared/ipc';
 import { resolveSettings } from '../../../src/shared/settings';
@@ -136,7 +137,7 @@ describe('JobManager', () => {
     await h.done(d.jobId);
   });
 
-  it('does not reuse an analysis of another URL or user agent, or when the cache is off', async () => {
+  it('does not reuse an analysis of another URL or user agent', async () => {
     const h = harness();
     const run = async (kind: 'analyze' | 'download', seedUrl: string, settings?: Record<string, unknown>) => {
       const r = h.manager.start({
@@ -152,8 +153,72 @@ describe('JobManager', () => {
     expect(await run('download', `${site.url}/html/about.html`)).toBe(false);
     await run('analyze', seed());
     expect(await run('download', seed(), { userAgent: 'Other/1.0' })).toBe(false);
-    await run('analyze', seed(), { analysisCacheTtlMs: 0 });
-    expect(await run('download', seed())).toBe(false);
+  });
+
+  it('does not keep an analysis when the saved cache setting is off', async () => {
+    const h = harness({ settings: () => resolveSettings({ retries: 0, analysisCacheTtlMs: 0 }).settings });
+    const a = h.manager.start({ kind: 'analyze', seedUrl: seed() });
+    await h.done(a.jobId);
+    expect(h.manager.analysisCache()).toBeUndefined();
+  });
+
+  it('ignores app-level settings in per-job changes', async () => {
+    const h = harness();
+    const saved = resolveSettings({ retries: 0 }).settings;
+    const r = h.manager.start({
+      kind: 'analyze',
+      seedUrl: seed(),
+      settings: { historySize: 3, analysisCacheTtlMs: 0, analysisCacheMaxBytes: 0, shutdownTimeoutMs: 1000, maxPages: 2 },
+    });
+    expect(r.settings.historySize).toBe(saved.historySize);
+    expect(r.settings.analysisCacheTtlMs).toBe(saved.analysisCacheTtlMs);
+    expect(r.settings.analysisCacheMaxBytes).toBe(saved.analysisCacheMaxBytes);
+    expect(r.settings.shutdownTimeoutMs).toBe(saved.shutdownTimeoutMs);
+    expect(r.settings.maxPages).toBe(2);
+    expect(r.warnings).toEqual([]);
+    await h.done(r.jobId);
+    expect(h.manager.analysisCache()).toBeDefined(); // the per-job "cache off" was ignored
+  });
+
+  it('counts the cache lifetime from the end of the analysis', async () => {
+    let clock = 1_000_000;
+    const ttl = resolveSettings({}).settings.analysisCacheTtlMs;
+    const h = harness({
+      now: () => clock,
+      run: async (...args: Parameters<typeof runJob>) => {
+        clock += ttl - 1; // a long analysis
+        return runJob(...args);
+      },
+    });
+    const a = h.manager.start({ kind: 'analyze', seedUrl: seed() });
+    await h.done(a.jobId);
+    expect(h.manager.analysisCache()?.expiresAt).toBe(clock + ttl);
+    clock += 2;
+    const d = h.manager.start({ kind: 'download', seedUrl: seed(), outputDir: await makeTmpDir('jm') });
+    expect(d.usesAnalysisCache).toBe(true);
+    await h.done(d.jobId);
+  });
+
+  it('frees the analysis when it expires', async () => {
+    const h = harness({ settings: () => resolveSettings({ retries: 0, analysisCacheTtlMs: 200 }).settings });
+    const a = h.manager.start({ kind: 'analyze', seedUrl: seed() });
+    await h.done(a.jobId);
+    expect(h.manager.analysisCache()?.bytes).toBeGreaterThan(0);
+    await vi.waitFor(() => expect(h.manager.analysisCache()).toBeUndefined(), { timeout: 3000 });
+  });
+
+  it('does not keep a cancelled analysis', async () => {
+    const h = harness();
+    const a = h.manager.start({ kind: 'analyze', seedUrl: `${slow.url}/slow/` });
+    h.manager.cancel(a.jobId);
+    expect((await h.done(a.jobId)).result.status).toBe('cancelled');
+    expect(h.manager.analysisCache()).toBeUndefined();
+  });
+
+  it('refuses new jobs once shut down', async () => {
+    const h = harness();
+    await h.manager.shutdown();
+    expect(() => h.manager.start({ kind: 'analyze', seedUrl: seed() })).toThrow('Trawler is shutting down.');
   });
 
   it('reports a failure to create the ports as a failed job and stays usable', async () => {

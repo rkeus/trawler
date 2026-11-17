@@ -20,7 +20,7 @@ import type {
 } from '../shared/ipc';
 import type { Settings } from '../shared/settings';
 import { toHistoryEntry } from './history-store';
-import { mergeSettings } from './settings-store';
+import { mergeSettings, withoutAppSettings } from './settings-store';
 
 export interface PortsHandle {
   ports: JobPorts;
@@ -52,8 +52,18 @@ export class JobBusyError extends Error {
 interface AnalysisCache {
   seedUrl: string;
   userAgent: string;
+  /** when the analysis finished (the lifetime counts from there) */
   createdAt: number;
+  ttlMs: number;
   cache: FetchCache;
+}
+
+export interface AnalysisCacheInfo {
+  /** normalized start URL the cache belongs to */
+  seedUrl: string;
+  bytes: number;
+  /** time (deps.now clock) after which it is no longer reused */
+  expiresAt: number;
 }
 
 interface CachePlan {
@@ -90,6 +100,7 @@ function quietly(fn: () => void): void {
 export class JobManager {
   private active: ActiveJob | undefined;
   private analysis: AnalysisCache | undefined;
+  private closed = false;
 
   constructor(private readonly deps: JobManagerDeps) {}
 
@@ -98,8 +109,10 @@ export class JobManager {
   }
 
   start(request: StartJobRequest): StartJobResponse {
+    if (this.closed) throw new Error('Trawler is shutting down.');
     if (this.active) throw new JobBusyError();
-    const { settings, warnings } = mergeSettings(this.deps.settings(), request.settings);
+    // app-level settings (history size, analysis cache, shutdown time) always come from the saved settings
+    const { settings, warnings } = mergeSettings(this.deps.settings(), withoutAppSettings(request.settings));
     const now = (this.deps.now ?? Date.now)();
     const jobId = (this.deps.newId ?? randomUUID)();
     const info: RunningJob = {
@@ -116,14 +129,21 @@ export class JobManager {
     return { jobId, settings, warnings, usesAnalysisCache: plan.serving };
   }
 
+  /** The analysis that the next download of its URL would reuse, if any. */
+  analysisCache(): AnalysisCacheInfo | undefined {
+    const a = this.analysis;
+    return a ? { seedUrl: a.seedUrl, bytes: a.cache.bytes, expiresAt: a.createdAt + a.ttlMs } : undefined;
+  }
+
   cancel(jobId: string): boolean {
     if (!this.active || this.active.info.jobId !== jobId) return false;
     this.active.abort.abort();
     return true;
   }
 
-  /** Cancels the running job, if any, and waits until it has cleaned up. */
+  /** Refuses new jobs, cancels the running one (if any) and waits until it has cleaned up. */
   async shutdown(): Promise<void> {
+    this.closed = true;
     const active = this.active;
     if (!active) return;
     active.abort.abort();
@@ -138,7 +158,8 @@ export class JobManager {
       const recording: AnalysisCache = {
         seedUrl,
         userAgent: settings.userAgent,
-        createdAt: now,
+        createdAt: now, // set again when the analysis finishes
+        ttlMs: settings.analysisCacheTtlMs,
         cache: new FetchCache(settings.analysisCacheMaxBytes),
       };
       return { recording, decorate: (f) => recording.cache.record(f), serving: false };
@@ -149,11 +170,21 @@ export class JobManager {
       !cached ||
       cached.seedUrl !== seedUrl ||
       cached.userAgent !== settings.userAgent ||
-      now - cached.createdAt > settings.analysisCacheTtlMs
+      now - cached.createdAt > cached.ttlMs
     ) {
       return { serving: false };
     }
     return { decorate: (f) => cached.cache.serve(f), serving: true };
+  }
+
+  /** Keeps a finished analysis for the next download, and frees its memory when it expires. */
+  private keepAnalysis(recording: AnalysisCache): void {
+    recording.createdAt = (this.deps.now ?? Date.now)();
+    this.analysis = recording;
+    const timer = setTimeout(() => {
+      if (this.analysis === recording) this.analysis = undefined;
+    }, recording.ttlMs);
+    timer.unref();
   }
 
   private async execute(active: ActiveJob, request: StartJobRequest, settings: Settings, plan: CachePlan): Promise<void> {
@@ -194,7 +225,7 @@ export class JobManager {
       };
     }
     await handle?.dispose().catch(() => undefined);
-    if (plan.recording && result.status === 'done') this.analysis = plan.recording;
+    if (plan.recording && result.status === 'done') this.keepAnalysis(plan.recording);
 
     const finishedAt = new Date((this.deps.now ?? Date.now)()).toISOString();
     let history: HistoryEntry | undefined;
