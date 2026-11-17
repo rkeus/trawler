@@ -1,5 +1,6 @@
 import os from 'node:os';
 import { app, dialog } from 'electron';
+import { APP_ID } from './app-id';
 import { parseCliArgs } from './cli';
 import { runCli } from './cli-runner';
 import { startDesktopApp } from './desktop';
@@ -19,6 +20,7 @@ function exitOnCrash(): void {
 }
 
 app.setName('Trawler');
+if (process.platform === 'win32') app.setAppUserModelId(APP_ID);
 const parsed = parseCliArgs(process.argv);
 
 if (parsed.kind === 'error') {
