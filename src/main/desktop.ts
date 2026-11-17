@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { app, dialog, session, shell, type BrowserWindow, type OpenDialogOptions } from 'electron';
-import { TRAWLER_VERSION } from '../engine';
+import { sleep, TRAWLER_VERSION } from '../engine';
 import { IPC_EVENTS } from '../shared/ipc';
 import { AppSessions } from './app-sessions';
 import { AppStateStore } from './app-state-store';
@@ -11,7 +11,8 @@ import { JobManager } from './job-manager';
 import { createElectronPorts } from './ports';
 import { PreviewManager } from './preview-manager';
 import { SettingsStore } from './settings-store';
-import { createMainWindow } from './window';
+import { isFileInside } from './ui-trust';
+import { createMainWindow, RENDERER_DIR } from './window';
 
 /**
  * Starts the desktop app: stores in userData, the job and preview managers, IPC, and the window.
@@ -50,7 +51,7 @@ export async function startDesktopApp(): Promise<void> {
       await sessions.reset(s.userAgent);
       return createElectronPorts(s, sessions);
     },
-    record: (entry, s) => history.add(entry, s.historySize),
+    record: (entry) => history.add(entry, settings.get().historySize),
     onEvent: (msg) => send(IPC_EVENTS.jobEvent, msg),
     onFinished: (msg) => send(IPC_EVENTS.jobFinished, msg),
   });
@@ -78,19 +79,34 @@ export async function startDesktopApp(): Promise<void> {
       },
       openExternal: (url) => shell.openExternal(url),
     }),
+    // only the app window's own UI page may call the API
+    (event) => event.sender === mainWindow?.webContents && isFileInside(event.senderFrame?.url ?? '', RENDERER_DIR),
   );
 
-  // quitting cancels a running job (partial manifest written) and stops the preview first
+  // quitting cancels a running job (partial manifest written) and stops the preview first, within shutdownTimeoutMs
   let quitting = false;
   app.on('before-quit', (event) => {
     if (quitting) return;
     event.preventDefault();
     quitting = true;
-    void Promise.allSettled([jobs.shutdown(), preview.stop()]).finally(() => app.quit());
+    const timedOut = Symbol('timed out');
+    void Promise.race([
+      Promise.allSettled([jobs.shutdown(), preview.stop()]),
+      sleep(settings.get().shutdownTimeoutMs).then(() => timedOut),
+    ]).then((outcome) => {
+      if (outcome === timedOut) {
+        process.stderr.write('shutdown timed out; exiting\n');
+        app.exit(0);
+      } else {
+        app.quit();
+      }
+    });
   });
 
   mainWindow = createMainWindow();
   mainWindow.on('closed', () => {
     mainWindow = undefined;
+    // hidden capture windows may still be open, so 'window-all-closed' would not fire: closing the UI quits
+    app.quit();
   });
 }

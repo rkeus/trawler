@@ -35,6 +35,8 @@ function text(v: unknown, name: string): string {
 
 function absolutePath(v: unknown, name: string): string {
   const s = text(v, name);
+  // UNC and device paths would make the OS contact other machines (and send credentials) on a stat
+  if (/^[\\/]{2}/.test(s)) throw new Error(`${name}: network and device paths are not supported`);
   if (!path.isAbsolute(s)) throw new Error(`${name}: expected an absolute path`);
   return path.resolve(s);
 }

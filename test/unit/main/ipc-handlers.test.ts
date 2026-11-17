@@ -158,4 +158,13 @@ describe('IPC handlers', () => {
     expect(await call('currentJob')).toEqual({ ok: true, value: null });
     expect(await call('chooseFolder')).toEqual({ ok: true, value: null });
   });
+
+  it('rejects network and device paths', async () => {
+    const { call, opened } = await setup();
+    for (const p of ['\\\\host\\share', '//host/share', '\\\\?\\C:\\Windows']) {
+      expect(await call('openFolder', p)).toEqual({ ok: false, error: 'dir: network and device paths are not supported' });
+      expect((await call('inspectFolder', p)).ok).toBe(false);
+    }
+    expect(opened).toEqual([]);
+  });
 });

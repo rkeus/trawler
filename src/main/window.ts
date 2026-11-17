@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { BrowserWindow } from 'electron';
 
 /** Built files, relative to the bundled main script (out/main/index.cjs). */
@@ -26,6 +27,9 @@ export function createMainWindow(): BrowserWindow {
   win.once('ready-to-show', () => win.show());
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', (event) => event.preventDefault());
-  void win.loadFile(path.join(RENDERER_DIR, 'index.html'));
+  // loadURL with a properly encoded file URL: loadFile fails for folders whose names contain "%"
+  win.loadURL(pathToFileURL(path.join(RENDERER_DIR, 'index.html')).href).catch((err: unknown) => {
+    process.stderr.write(`could not load the UI: ${err instanceof Error ? err.message : String(err)}\n`);
+  });
   return win;
 }
