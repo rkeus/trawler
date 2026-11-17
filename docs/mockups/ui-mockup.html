@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en" data-palette="ember">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trawler UI mockup v2</title>
+<style>
+:root {
+  --bg0: #0b0e14; --bg1: #10141d;
+  --glass: rgba(255,255,255,.055); --glass2: rgba(255,255,255,.09); --stroke: rgba(255,255,255,.11);
+  --text: #e8ecf4; --muted: #8993a8; --faint: #5d667a;
+  --ok: #4ade9b; --warn: #ffc857; --err: #ff6b7a;
+  --glow: 0 0 14px rgba(var(--ar), .28);
+  --shadow: 0 10px 40px rgba(0,0,0,.45);
+  --mono: Consolas, "Cascadia Mono", monospace;
+}
+:root[data-theme="light"] {
+  --bg0: #e9edf5; --bg1: #f6f8fc;
+  --glass: rgba(255,255,255,.6); --glass2: rgba(255,255,255,.85); --stroke: rgba(30,40,70,.12);
+  --text: #182033; --muted: #5a6479; --faint: #8a93a6;
+  --ok: #138a56; --warn: #b7791f; --err: #d03a4c;
+  --glow: 0 0 12px rgba(var(--ar), .22);
+  --shadow: 0 10px 40px rgba(40,60,110,.18);
+}
+/* palettes: --a1 main accent, --a2 a close sibling (same hue family), --ar the same as r,g,b for tints */
+:root[data-palette="slate"]  { --a1: #8fb3d9; --a2: #6f93bd; --ar: 143,179,217; }
+:root[data-palette="ember"]  { --a1: #f0955a; --a2: #d9723b; --ar: 240,149,90; }
+:root[data-palette="moss"]   { --a1: #9bc28a; --a2: #7ba86a; --ar: 155,194,138; }
+:root[data-palette="sand"]   { --a1: #e3c06b; --a2: #c9a24a; --ar: 227,192,107; }
+:root[data-palette="clay"]   { --a1: #e39aa8; --a2: #c97b8b; --ar: 227,154,168; }
+:root[data-palette="ink"]    { --a1: #d7dce6; --a2: #b4bccb; --ar: 215,220,230; }
+:root[data-theme="light"][data-palette="slate"] { --a1: #35608f; --a2: #4d7aa8; --ar: 53,96,143; }
+:root[data-theme="light"][data-palette="ember"] { --a1: #b4531c; --a2: #cf6a2e; --ar: 180,83,28; }
+:root[data-theme="light"][data-palette="moss"]  { --a1: #3f7a35; --a2: #5a9450; --ar: 63,122,53; }
+:root[data-theme="light"][data-palette="sand"]  { --a1: #8a6a12; --a2: #a98320; --ar: 138,106,18; }
+:root[data-theme="light"][data-palette="clay"]  { --a1: #a8435a; --a2: #c0586f; --ar: 168,67,90; }
+:root[data-theme="light"][data-palette="ink"]   { --a1: #2a3140; --a2: #4a5365; --ar: 42,49,64; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #05070b; font: 13px/1.4 "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; color: var(--text); }
+.switcher { display: flex; gap: 6px; padding: 8px 14px; background: #000; color: #aaa; align-items: center; flex-wrap: wrap; }
+.switcher button { background: #1b1f27; color: #ccc; border: 0; padding: 5px 11px; border-radius: 6px; cursor: pointer; }
+.switcher button.on { background: #5ee0ff; color: #000; }
+.switcher .sp { flex: 1; }
+
+.app { position: relative; width: min(1040px, 100%); height: 660px; margin: 16px auto; border-radius: 14px; overflow: hidden;
+  background: linear-gradient(160deg, var(--bg1), var(--bg0)); box-shadow: var(--shadow); border: 1px solid var(--stroke); display: grid;
+  grid-template-columns: 54px 1fr; grid-template-rows: 34px 1fr 26px; }
+.glass { background: var(--glass); border: 1px solid var(--stroke); backdrop-filter: blur(18px) saturate(140%); -webkit-backdrop-filter: blur(18px) saturate(140%); border-radius: 12px; }
+
+.titlebar { grid-column: 1 / 3; display: flex; align-items: center; padding: 0 12px; gap: 8px; z-index: 2; color: var(--muted); font-size: 12px; }
+.titlebar .brand { width: 16px; height: 16px; color: var(--a1); stroke-width: 3; }
+svg .f { fill: currentColor; stroke: none; }
+.welcome { display: grid; grid-template-columns: auto repeat(3, 1fr); gap: 10px; margin-top: 14px; align-items: stretch; }
+.welcome .intro { padding: 12px 14px; max-width: 250px; }
+.welcome .intro b { display: block; font-size: 14px; margin-bottom: 4px; }
+.welcome .intro span { color: var(--muted); font-size: 12px; }
+.step { padding: 12px 14px; }
+.step .k { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; font-size: 11px; font-weight: 700; color: var(--a1); background: rgba(var(--ar), .16); box-shadow: inset 0 0 0 1px rgba(var(--ar), .45); margin-bottom: 6px; }
+.step b { display: block; font-size: 12px; margin-bottom: 2px; }
+.step span { color: var(--muted); font-size: 11.5px; }
+.titlebar .dot { width: 10px; height: 10px; border-radius: 50%; background: linear-gradient(135deg, var(--a1), var(--a2)); box-shadow: var(--glow); }
+.titlebar b { color: var(--text); font-weight: 600; letter-spacing: .03em; }
+.titlebar .sp { flex: 1; }
+.titlebar i { width: 11px; height: 11px; border-radius: 3px; background: var(--glass2); display: inline-block; }
+
+.rail { z-index: 2; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 0; }
+.rail button { width: 36px; height: 36px; border-radius: 10px; border: 1px solid transparent; background: transparent; color: var(--muted); cursor: pointer; display: grid; place-items: center; transition: .2s; }
+.rail button:hover { background: var(--glass); color: var(--text); }
+.rail button.on { background: var(--glass2); color: var(--a1); border-color: var(--stroke); box-shadow: var(--glow); }
+.rail .sp { flex: 1; }
+svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+
+.stage { position: relative; z-index: 1; padding: 6px 16px 10px 8px; overflow: hidden; }
+.screen { position: absolute; inset: 6px 16px 10px 8px; opacity: 0; transform: translateY(10px) scale(.992); pointer-events: none; transition: opacity .35s ease, transform .35s cubic-bezier(.2,.8,.2,1); overflow: auto; padding: 2px; }
+.screen.on { opacity: 1; transform: none; pointer-events: auto; }
+/* custom scrollbars: thin rail, glass thumb with an accent edge that wakes up on hover */
+.screen, .scroll, .log { scrollbar-gutter: stable; }
+.screen::-webkit-scrollbar, .scroll::-webkit-scrollbar, .log::-webkit-scrollbar { width: 10px; height: 10px; }
+.screen::-webkit-scrollbar-track, .scroll::-webkit-scrollbar-track, .log::-webkit-scrollbar-track { background: transparent; margin: 6px 0; }
+.screen::-webkit-scrollbar-thumb, .scroll::-webkit-scrollbar-thumb, .log::-webkit-scrollbar-thumb {
+  background: var(--glass2); border: 3px solid transparent; background-clip: padding-box; border-radius: 8px;
+  box-shadow: inset 0 0 0 1px var(--stroke); transition: background .2s;
+}
+.screen::-webkit-scrollbar-thumb:hover, .scroll::-webkit-scrollbar-thumb:hover, .log::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, var(--a1), var(--a2)); background-clip: padding-box;
+}
+.screen::-webkit-scrollbar-corner, .scroll::-webkit-scrollbar-corner, .log::-webkit-scrollbar-corner { background: transparent; }
+
+.status { grid-column: 1 / 3; z-index: 2; display: flex; gap: 14px; align-items: center; padding: 0 14px; font-size: 11px; color: var(--faint); border-top: 1px solid var(--stroke); }
+.status .live { color: var(--ok); } .status .live::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--ok); margin-right: 6px; box-shadow: 0 0 8px var(--ok); }
+.status .sp { flex: 1; }
+
+/* components */
+h1 { font-size: 15px; margin: 0 0 10px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.cap { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); margin: 14px 0 6px; }
+.cmd { display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 14px; border-radius: 14px; transition: .25s; }
+.cmd:focus-within { border-color: var(--a1); box-shadow: var(--glow); }
+.cmd input { flex: 1; background: none; border: 0; outline: 0; color: var(--text); font: 15px var(--mono); padding: 8px 0; }
+.cmd svg { color: var(--a1); }
+.btn { border: 1px solid var(--stroke); background: var(--glass); color: var(--text); padding: 7px 13px; border-radius: 9px; cursor: pointer; font: inherit; transition: .2s; }
+.btn:hover { background: var(--glass2); transform: translateY(-1px); }
+.btn.go { background: rgba(var(--ar), .16); border: 1px solid rgba(var(--ar), .5); color: var(--a1); font-weight: 600; }
+.btn.go:hover { background: rgba(var(--ar), .26); box-shadow: var(--glow); }
+.btn.sm { padding: 3px 9px; font-size: 11px; border-radius: 7px; }
+.btn.stop { color: var(--err); border-color: rgba(255,107,122,.4); }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; align-items: center; }
+.chip { display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px; border-radius: 20px; font-size: 12px; color: var(--muted); }
+.chip b { color: var(--text); font-weight: 600; }
+.seg { display: inline-flex; padding: 3px; border-radius: 20px; gap: 2px; }
+.seg span { padding: 3px 12px; border-radius: 16px; color: var(--muted); font-size: 12px; transition: .2s; }
+.seg span.on { background: rgba(var(--ar), .18); color: var(--a1); font-weight: 600; box-shadow: inset 0 0 0 1px rgba(var(--ar), .45); }
+.sw { width: 28px; height: 16px; border-radius: 9px; background: rgba(var(--ar), .22); box-shadow: inset 0 0 0 1px rgba(var(--ar), .5); position: relative; }
+.sw::after { content: ""; position: absolute; top: 3px; right: 3px; width: 10px; height: 10px; border-radius: 50%; background: var(--a1); box-shadow: var(--glow); }
+.notice { display: flex; align-items: center; gap: 10px; padding: 7px 12px; font-size: 12px; color: var(--muted); margin-bottom: 10px; border-left: 3px solid var(--warn); }
+.notice .sp { flex: 1; }
+.list { padding: 4px; }
+.row { display: grid; grid-template-columns: 1.6fr 1.4fr 70px 90px 1.1fr auto; gap: 10px; align-items: center; padding: 6px 10px; border-radius: 8px; transition: .15s; font-size: 12px; }
+.row:hover { background: var(--glass); }
+.row .url { font-family: var(--mono); color: var(--text); }
+.row .m { color: var(--faint); }
+.tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 10px; font-weight: 700; letter-spacing: .06em; border: 1px solid var(--stroke); }
+.tag.static { color: var(--ok); } .tag.js { color: var(--a1); } .tag.hybrid { color: var(--warn); }
+.ok { color: var(--ok); } .wn { color: var(--warn); } .er { color: var(--err); }
+.acts { display: flex; gap: 4px; opacity: .55; transition: .2s; } .row:hover .acts { opacity: 1; }
+.grid2 { display: grid; grid-template-columns: 230px 1fr; gap: 12px; }
+.card { padding: 12px 14px; }
+.verdict { text-align: center; padding: 16px 12px; }
+.ring { width: 110px; height: 110px; border-radius: 50%; margin: 6px auto 10px; display: grid; place-items: center;
+  background: conic-gradient(var(--warn) 0 30%, var(--glass2) 30% 100%); box-shadow: 0 0 22px rgba(255,200,87,.3); }
+.ring div { width: 86px; height: 86px; border-radius: 50%; background: var(--bg1); display: grid; place-items: center; font-weight: 700; font-size: 15px; }
+.nums { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+.num { padding: 9px 12px; } .num b { display: block; font-size: 19px; } .num span { font-size: 11px; color: var(--muted); }
+ul.plain { margin: 0; padding-left: 16px; color: var(--muted); } ul.plain li { margin: 3px 0; }
+.mono { font-family: var(--mono); font-size: 12px; }
+.scroll { max-height: 120px; overflow: auto; color: var(--muted); line-height: 1.7; }
+.bar { position: relative; height: 10px; border-radius: 6px; background: var(--glass2); overflow: hidden; margin: 10px 0; }
+.bar i { position: absolute; inset: 0 auto 0 0; width: 62%; border-radius: 6px; background: linear-gradient(90deg, var(--a2), var(--a1)); }
+.bar i::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255,255,255,.3), transparent); animation: sheen 1.8s linear infinite; }
+@keyframes sheen { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+.steps { display: flex; gap: 6px; flex-wrap: wrap; }
+.steps span { padding: 4px 11px; border-radius: 16px; font-size: 12px; color: var(--faint); border: 1px solid var(--stroke); }
+.steps .d { color: var(--ok); } .steps .n { color: var(--a1); background: rgba(var(--ar), .16); border-color: rgba(var(--ar), .5); font-weight: 600; animation: pulse 1.8s ease-in-out infinite; }
+@keyframes pulse { 50% { box-shadow: 0 0 14px rgba(var(--ar), .35); } }
+.log { height: 150px; overflow: auto; padding: 8px 12px; font: 12px/1.65 var(--mono); color: var(--muted); }
+.log .w { color: var(--warn); } .log .e { color: var(--err); }
+.tabs { display: flex; gap: 12px; margin-bottom: 6px; font-size: 12px; color: var(--faint); } .tabs .on { color: var(--text); border-bottom: 2px solid var(--a1); }
+.big { display: grid; place-items: center; width: 54px; height: 54px; border-radius: 50%; background: rgba(74,222,155,.14); color: var(--ok); box-shadow: 0 0 26px rgba(74,222,155,.4); }
+.hero { display: flex; gap: 16px; align-items: center; padding: 14px 16px; margin-bottom: 12px; }
+.hero h1 { margin: 0; font-size: 18px; }
+.fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.fields label { display: block; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); margin-bottom: 3px; }
+.fields input, .fields select { width: 100%; background: var(--glass); border: 1px solid var(--stroke); color: var(--text); padding: 6px 9px; border-radius: 8px; font: 12px var(--mono); outline: 0; }
+.fields input:focus { border-color: var(--a1); box-shadow: var(--glow); }
+.actions { display: flex; gap: 8px; margin-top: 12px; align-items: center; }
+.hint { color: var(--faint); font-size: 11px; }
+.swatches { display: flex; gap: 8px; }
+.swatch { width: 24px; height: 24px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; transition: .2s; }
+.swatch:hover { transform: scale(1.12); }
+.swatch.on { box-shadow: 0 0 0 2px var(--bg1), 0 0 0 4px var(--a1); }
+</style>
+</head>
+<body>
+<div class="switcher">
+  <strong style="color:#ddd">Mockup v2:</strong>
+  <button data-s="start" class="on">A. Start</button>
+  <button data-s="analysis">B. Analysis</button>
+  <button data-s="progress">C. Progress</button>
+  <button data-s="done">D. Done</button>
+  <button data-s="settings">E. Settings</button>
+  <span class="sp"></span>
+  <button id="theme">Dark / light</button>
+</div>
+
+<div class="app">
+  <div class="titlebar"><svg class="brand" viewBox="1.75 -3 48 54"><path d="M16.75 12l-10 9 10 9"/><path d="M34.75 12l10 9-10 9"/><circle cx="30.6" cy="1.5" r="2"/><path d="M30.1 3.5L21.5 38a5.5 5.5 0 0010.6 2.6l1.4-4.6"/><path d="M33.5 36l-3.6 1.6"/></svg><b>TRAWLER</b><span>website template downloader</span><span class="sp"></span><i></i><i></i><i></i></div>
+
+  <nav class="rail">
+    <button class="on" data-s="start" title="Start"><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 19h14"/></svg></button>
+    <button data-s="analysis" title="Analysis"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4-4"/></svg></button>
+    <button data-s="progress" title="Progress"><svg viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></button>
+    <button data-s="done" title="Result"><svg viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg></button>
+    <span class="sp"></span>
+    <button data-s="settings" title="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6l2.1 2.1M5.6 18.4l2.1-2.1m8.6-8.6l2.1-2.1"/></svg></button>
+  </nav>
+
+  <div class="stage">
+    <!-- A -->
+    <section class="screen on" id="start">
+      <div class="glass notice"><span>Use Trawler only on templates you own a license for, free templates, or your own sites.</span><span class="sp"></span><button class="btn sm">Got it</button></div>
+      <div class="glass cmd">
+        <svg viewBox="0 0 24 24"><path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1"/></svg>
+        <input value="https://example.com/template/index.html" spellcheck="false">
+        <button class="btn">Analyze</button><button class="btn go">Download</button>
+      </div>
+      <div class="chips">
+        <span class="glass chip"><svg viewBox="0 0 24 24" style="width:14px;height:14px"><path d="M3 7h6l2 2h10v10H3z"/></svg><b>D:\templates\example</b><button class="btn sm">Change</button></span>
+        <span class="glass seg"><span class="on">Auto</span><span>Static</span><span>JS</span></span>
+        <span class="glass chip"><span class="sw"></span>External assets local</span>
+        <span class="glass chip">Depth <b>5</b> &middot; Pages <b>500</b> &middot; Parallel <b>6</b></span>
+      </div>
+      <div class="welcome">
+        <div class="glass intro"><b>Cast a URL. Haul back the whole template.</b><span>Trawler downloads a website template with all its pages, styles, scripts, images and fonts into a folder, in the same structure as on the server, so it works offline.</span></div>
+        <div class="glass step"><div class="k">1</div><b>Paste a link</b><span>The template's demo URL, e.g. its index.html.</span></div>
+        <div class="glass step"><div class="k">2</div><b>Analyze</b><span>Trawler sounds it out: static HTML or built by JavaScript, how many pages, what it loads from elsewhere.</span></div>
+        <div class="glass step"><div class="k">3</div><b>Download</b><span>Get a working local copy, checked page by page. Preview it in your browser.</span></div>
+      </div>
+      <div class="hint" style="margin-top:6px">Shown on first run and whenever Recent is empty.</div>
+      <div class="cap">Recent</div>
+      <div class="glass list">
+        <div class="row"><span class="url">example.com/template</span><span class="m">D:\templates\example</span><span class="tag static">STATIC</span><span class="m">17 Nov 10:12</span><span class="ok">111 pages &middot; verified</span><span class="acts"><button class="btn sm">Repeat</button><button class="btn sm">Folder</button><button class="btn sm">Preview</button></span></div>
+        <div class="row"><span class="url">spa.example.org</span><span class="m">D:\templates\spa</span><span class="tag js">JS</span><span class="m">16 Nov 18:40</span><span class="wn">24 pages &middot; 3 errors</span><span class="acts"><button class="btn sm">Repeat</button><button class="btn sm">Folder</button><button class="btn sm">Preview</button></span></div>
+        <div class="row"><span class="url">demo.test/shop</span><span class="m">analysis only</span><span class="tag hybrid">HYBRID</span><span class="m">16 Nov 17:05</span><span class="m">48 pages found</span><span class="acts"><button class="btn sm">Repeat</button></span></div>
+        <div class="row"><span class="url">html5up.net/dimension</span><span class="m">D:\templates\dimension</span><span class="tag static">STATIC</span><span class="m">14 Nov 09:30</span><span class="ok">6 pages &middot; verified</span><span class="acts"><button class="btn sm">Repeat</button><button class="btn sm">Folder</button><button class="btn sm">Preview</button></span></div>
+      </div>
+    </section>
+
+    <!-- B -->
+    <section class="screen" id="analysis">
+      <h1>example.com/template <span class="tag hybrid">HYBRID</span><span class="hint">React &middot; Bootstrap</span></h1>
+      <div class="grid2">
+        <div>
+          <div class="glass verdict"><div class="ring"><div>0.30</div></div><b>Server-rendered</b><div class="hint">framework markers, text already in the HTML &rarr; JS mode is safest</div></div>
+          <div class="glass card" style="margin-top:12px"><div class="cap" style="margin-top:0">Recommended</div>
+            <div class="seg glass"><span>Auto</span><span>Static</span><span class="on">JS</span></div>
+            <div class="fields" style="margin-top:10px"><div><label>Render timeout ms</label><input value="20000"></div></div></div>
+        </div>
+        <div>
+          <div class="nums">
+            <div class="glass num"><b>111</b><span>pages</span></div><div class="glass num"><b>482</b><span>assets</span></div>
+            <div class="glass num"><b>3</b><span>external hosts</span></div><div class="glass num"><b>~38 MB</b><span>estimated</span></div>
+          </div>
+          <div class="glass card"><div class="cap" style="margin-top:0">Why</div><ul class="plain"><li>Framework markers found (React), text is present in the served HTML.</li><li>Mount <span class="mono">#root</span> is not empty.</li><li>2 JSON data requests after load.</li></ul></div>
+          <div class="glass card" style="margin-top:12px"><div class="cap" style="margin-top:0">Pages &middot; 111</div><div class="scroll mono">/template/index.html<br>/template/about.html<br>/template/blog/index.html<br>/template/blog/post-1.html<br>/template/contact.html<br>... 106 more</div></div>
+          <div class="glass card notice" style="margin-top:12px;display:block"><b class="wn">2 warnings</b> &nbsp; robots.txt disallows /admin/ &middot; 1 iframe (map) keeps its URL</div>
+        </div>
+      </div>
+      <div class="actions"><button class="btn go">Download with these settings</button><button class="btn">Back</button><span class="hint">Pages already fetched by this analysis are reused.</span></div>
+    </section>
+
+    <!-- C -->
+    <section class="screen" id="progress">
+      <h1>Downloading example.com/template <span class="tag js">JS</span></h1>
+      <div class="steps"><span class="d">Detecting</span><span class="n">Crawling</span><span>Assets</span><span>Rewriting</span><span>Verifying</span><span>Done</span></div>
+      <div class="glass card" style="margin-top:12px">
+        <div style="display:flex;justify-content:space-between"><b>69 / 111 pages</b><span class="hint">62%</span></div>
+        <div class="bar"><i></i></div>
+        <div class="nums" style="margin:8px 0 0">
+          <div class="num"><b>301</b><span>assets</span></div><div class="num"><b>24.1 MB</b><span>downloaded</span></div>
+          <div class="num"><b>6</b><span>parallel</span></div><div class="num"><b class="wn">2</b><span>errors</span></div>
+        </div>
+      </div>
+      <div class="cap">Live</div>
+      <div class="glass"><div class="tabs" style="padding:8px 12px 0"><span class="on">Log</span><span>Errors (2)</span></div>
+        <div class="log">10:14:02 detection: hybrid (0.30) &rarr; JS mode<br>10:14:03 rendered /template/index.html<br>10:14:04 rendered /template/about.html<br><span class="w">10:14:06 server is throttling; parallel lowered to 3</span><br>10:14:07 rendered /template/blog/index.html<br><span class="e">10:14:09 HTTP 404 /template/assets/img/missing.png</span><br>10:14:10 rendered /template/blog/post-1.html</div></div>
+      <div class="actions"><button class="btn stop">Cancel</button><span class="hint">Keeps what was downloaded and writes a partial manifest.</span></div>
+    </section>
+
+    <!-- D -->
+    <section class="screen" id="done">
+      <div class="glass hero"><div class="big"><svg viewBox="0 0 24 24" style="width:26px;height:26px"><path d="M5 12l5 5 9-10"/></svg></div>
+        <div><h1>Done <span class="wn" style="font-weight:400;font-size:13px">with 2 errors</span></h1><div class="hint">JS mode (detected hybrid) &middot; 111/111 pages verified, 0 missing files</div></div></div>
+      <div class="nums"><div class="glass num"><b>111</b><span>pages</span></div><div class="glass num"><b>482</b><span>assets</span></div><div class="glass num"><b>38.4 MB</b><span>size</span></div><div class="glass num"><b class="wn">2</b><span>errors</span></div></div>
+      <div class="glass card"><div class="cap" style="margin-top:0">Errors</div>
+        <div class="mono" style="color:var(--muted);line-height:1.8">/template/assets/img/missing.png &nbsp; <span class="er">HTTP 404</span> &nbsp; from index.html<br>https://cdn.example/old.js &nbsp; <span class="er">timeout</span> &nbsp; from about.html</div></div>
+      <div class="glass card" style="margin-top:12px"><div class="cap" style="margin-top:0">Saved to</div><span class="mono">D:\templates\example</span></div>
+      <div class="actions"><button class="btn go">Run preview</button><button class="btn">Open folder</button><button class="btn">Open report</button><button class="btn">New download</button></div>
+    </section>
+
+    <!-- E -->
+    <section class="screen" id="settings">
+      <h1>Settings</h1>
+      <div class="glass card"><div class="cap" style="margin-top:0">Download</div>
+        <div class="fields"><div><label>Max depth</label><input value="5"></div><div><label>Max pages</label><input value="500"></div><div><label>Concurrency</label><input value="6"></div><div><label>Retries</label><input value="2"></div><div><label>Timeout ms</label><input value="30000"></div><div><label>Delay ms</label><input value="0"></div><div><label>User agent</label><input placeholder="Chromium default"></div><div><label>Folder not empty</label><select><option>Ask</option></select></div></div></div>
+      <div class="glass card" style="margin-top:12px"><div class="cap" style="margin-top:0">JS mode</div>
+        <div class="fields"><div><label>Render timeout ms</label><input value="15000"></div><div><label>Network idle ms</label><input value="1000"></div><div><label>Parallel windows</label><input value="2"></div><div><label>Analyze pages</label><input value="5"></div></div></div>
+      <div class="glass card" style="margin-top:12px"><div class="cap" style="margin-top:0">Appearance</div>
+        <div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap">
+          <div><label class="hint">Theme</label><div class="glass seg" style="margin-top:4px"><span>System</span><span class="on">Dark</span><span>Light</span></div></div>
+          <div><label class="hint">Accent</label>
+            <div class="swatches" style="margin-top:4px">
+              <button class="swatch" data-p="ember" style="background:#f0955a" title="Ember"></button>
+              <button class="swatch" data-p="slate" style="background:#8fb3d9" title="Slate"></button>
+              <button class="swatch" data-p="moss" style="background:#9bc28a" title="Moss"></button>
+              <button class="swatch" data-p="sand" style="background:#e3c06b" title="Sand"></button>
+              <button class="swatch" data-p="clay" style="background:#e39aa8" title="Clay"></button>
+              <button class="swatch" data-p="ink" style="background:#d7dce6" title="Ink"></button>
+            </div></div>
+        </div></div>
+      <div class="glass card" style="margin-top:12px"><div class="cap" style="margin-top:0">Application</div>
+        <div class="fields"><div><label>History size</label><input value="20"></div><div><label>Reuse analysis (min)</label><input value="30"></div></div>
+        <div class="hint" style="margin-top:6px">App-wide. A single job (for example Repeat) never changes these.</div></div>
+      <div class="actions"><button class="btn go">Save</button><button class="btn">Reset to defaults</button></div>
+    </section>
+  </div>
+
+  <div class="status"><span class="live">Ready</span><span>one job at a time</span><span class="sp"></span><span>session reset per job</span><span>127.0.0.1 preview off</span></div>
+</div>
+
+<script>
+function show(id) {
+  document.querySelectorAll('.screen').forEach(function (s) { s.classList.toggle('on', s.id === id); });
+  document.querySelectorAll('.rail button[data-s], .switcher button[data-s]').forEach(function (b) { b.classList.toggle('on', b.dataset.s === id); });
+}
+document.querySelectorAll('[data-s]').forEach(function (b) { b.addEventListener('click', function () { show(b.dataset.s); }); });
+function setPalette(p) {
+  document.documentElement.dataset.palette = p;
+  document.querySelectorAll('.swatch').forEach(function (b) { b.classList.toggle('on', b.dataset.p === p); });
+}
+document.querySelectorAll('.swatch').forEach(function (b) { b.addEventListener('click', function () { setPalette(b.dataset.p); }); });
+setPalette('ember');
+document.getElementById('theme').addEventListener('click', function () {
+  var r = document.documentElement; r.dataset.theme = r.dataset.theme === 'light' ? 'dark' : 'light';
+});
+</script>
+</body>
+</html>
