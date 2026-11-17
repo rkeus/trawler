@@ -5,15 +5,15 @@ const DIR = 'C:\\Users\\FIRSTN~1\\App [x]\\out\\renderer';
 
 describe('isFileInside', () => {
   it('accepts files in the folder, however the URL is encoded', () => {
-    expect(isFileInside('file:///C:/Users/FIRSTN~1/App%20[x]/out/renderer/index.html', DIR)).toBe(true);
-    expect(isFileInside('file:///C:/Users/FIRSTN%7E1/App%20%5Bx%5D/out/renderer/index.html', DIR)).toBe(true);
-    expect(isFileInside('file:///c:/users/firstn~1/app%20[x]/OUT/renderer/index.html', DIR)).toBe(true);
-    expect(isFileInside('file:///C:/Users/FIRSTN~1/App%20[x]/out/renderer/sub/page.html?a=1#b', DIR)).toBe(true);
+    expect(isFileInside('file:///C:/Users/FIRSTN~1/App%20[x]/out/renderer/index.html', DIR, 'win32')).toBe(true);
+    expect(isFileInside('file:///C:/Users/FIRSTN%7E1/App%20%5Bx%5D/out/renderer/index.html', DIR, 'win32')).toBe(true);
+    expect(isFileInside('file:///c:/users/firstn~1/app%20[x]/OUT/renderer/index.html', DIR, 'win32')).toBe(true);
+    expect(isFileInside('file:///C:/Users/FIRSTN~1/App%20[x]/out/renderer/sub/page.html?a=1#b', DIR, 'win32')).toBe(true);
   });
 
   it('accepts non-ASCII folder names', () => {
     const name = `${String.fromCodePoint(0x17d)}eljko`; // "Zeljko" with a caron on the Z
-    expect(isFileInside(`file:///C:/Users/${encodeURIComponent(name)}/out/renderer/index.html`, `C:\\Users\\${name}\\out\\renderer`)).toBe(true);
+    expect(isFileInside(`file:///C:/Users/${encodeURIComponent(name)}/out/renderer/index.html`, `C:\\Users\\${name}\\out\\renderer`, 'win32')).toBe(true);
   });
 
   it('rejects everything else', () => {
@@ -28,7 +28,12 @@ describe('isFileInside', () => {
       '',
       'not a url',
     ]) {
-      expect(isFileInside(url, DIR), url).toBe(false);
+      expect(isFileInside(url, DIR, 'win32'), url).toBe(false);
     }
+  });
+
+  it('applies POSIX rules when asked', () => {
+    expect(isFileInside('file:///opt/Trawler%20%5Bx%5D/out/renderer/index.html', '/opt/Trawler [x]/out/renderer', 'posix')).toBe(true);
+    expect(isFileInside('file:///opt/trawler/out/renderer/index.html', '/opt/Trawler/out/renderer', 'posix')).toBe(false);
   });
 });
