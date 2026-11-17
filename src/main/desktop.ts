@@ -51,7 +51,8 @@ export async function startDesktopApp(): Promise<void> {
   const settings = new SettingsStore(SettingsStore.fileIn(userData));
   const history = new HistoryStore(HistoryStore.fileIn(userData));
   const appState = new AppStateStore(AppStateStore.fileIn(userData));
-  await Promise.all([settings.load(), history.load(), appState.load()]);
+  const [settingsSnapshot, historyWarnings] = await Promise.all([settings.load(), history.load(), appState.load()]);
+  const startupWarnings = [...settingsSnapshot.warnings, ...historyWarnings, ...appState.loadWarnings()];
 
   const sessions = new AppSessions();
   const send = (channel: string, payload: unknown): void => sendTo(mainWindow?.webContents, channel, payload);
@@ -75,7 +76,7 @@ export async function startDesktopApp(): Promise<void> {
       appState,
       jobs,
       preview,
-      info: { version: TRAWLER_VERSION, userDataDir: userData },
+      info: { version: TRAWLER_VERSION, userDataDir: userData, startupWarnings },
       chooseFolder: async (defaultPath) => {
         const options: OpenDialogOptions = {
           properties: ['openDirectory', 'createDirectory'],
@@ -94,17 +95,17 @@ export async function startDesktopApp(): Promise<void> {
     (event) => event.sender === mainWindow?.webContents && isFileInside(event.senderFrame?.url ?? '', RENDERER_DIR),
   );
 
-  app.on('before-quit', (event) => {
-    if (shutdownDone) return;
-    // every quit request while the shutdown is still running (window-all-closed, the window's 'closed') is held back too
-    event.preventDefault();
-    if (quitting) return;
-    quitting = true;
-    const timedOut = Symbol('timed out');
-    void Promise.race([
+  // quitting cancels a running job (partial manifest written) and stops the preview first, within shutdownTimeoutMs
+  const timedOut = Symbol('timed out');
+  const shutdown = (): Promise<unknown> =>
+    Promise.race([
       Promise.allSettled([jobs.shutdown(), preview.stop()]),
       sleep(settings.get().shutdownTimeoutMs).then(() => timedOut),
-    ]).then((outcome) => {
+    ]);
+  const quitAfterShutdown = (): void => {
+    if (quitting) return;
+    quitting = true;
+    void shutdown().then((outcome) => {
       if (relaunchAfterQuit) app.relaunch();
       if (outcome === timedOut) {
         process.stderr.write('shutdown timed out; exiting\n');
@@ -114,9 +115,19 @@ export async function startDesktopApp(): Promise<void> {
         app.quit();
       }
     });
+  };
+
+  app.on('before-quit', (event) => {
+    if (shutdownDone) return;
+    // every quit request while the shutdown is still running (window-all-closed, the window's 'closed') is held back too
+    event.preventDefault();
+    quitAfterShutdown();
   });
 
   mainWindow = createMainWindow();
+  // Windows logoff or shutdown skips 'before-quit': run the same shutdown, so a running job still writes its partial
+  // manifest. Windows may end the process before it is done, so this is best effort.
+  mainWindow.on('session-end', () => quitAfterShutdown());
   mainWindow.on('closed', () => {
     mainWindow = undefined;
     // hidden capture windows may still be open, so 'window-all-closed' would not fire: closing the UI quits

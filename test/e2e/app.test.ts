@@ -184,4 +184,37 @@ describe('Trawler desktop app (real Electron, API level)', () => {
       await run.app.close().catch(() => undefined);
     }
   });
+
+  it('Windows session end cancels the running job and quits', async () => {
+    const profile = await makeTmpDir('e2e-profile');
+    const run = await launchApp(profile);
+    try {
+      const exited = new Promise<number | null>((resolve) => run.app.process().once('exit', (code) => resolve(code)));
+      await api(run, 'startJob', {
+        kind: 'download',
+        seedUrl: `${hold.url}/hold/`,
+        outputDir: await makeTmpDir('e2e-out'),
+        settings: { mode: 'js', retries: 0 },
+      });
+      // the hidden capture window is rendering the page (its image never arrives in time)
+      await vi.waitFor(() => expect(hold.requests).toContain('/slow.png'), { timeout: 30000, interval: 200 });
+      // a hidden capture window is open next to the UI window: 'window-all-closed' alone would not quit
+      await vi.waitFor(
+        async () => expect(await run.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBeGreaterThan(1),
+        { timeout: 10000, interval: 200 },
+      );
+      await run.app
+        .evaluate(({ BrowserWindow }) => {
+          // what Windows does on logoff or shutdown
+          BrowserWindow.getAllWindows().find((w) => w.isVisible())?.emit('session-end', { preventDefault: () => undefined });
+        })
+        .catch(() => undefined); // the app may already be going away
+      const outcome = await Promise.race([exited, new Promise((r) => setTimeout(() => r('still running'), 20000))]);
+      expect(outcome).not.toBe('still running');
+      const history = JSON.parse(await fs.readFile(path.join(profile, 'history.json'), 'utf8'));
+      expect(history.entries[0].status).toBe('cancelled');
+    } finally {
+      await run.app.close().catch(() => undefined);
+    }
+  });
 });

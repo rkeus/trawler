@@ -1,5 +1,5 @@
 import os from 'node:os';
-import { app } from 'electron';
+import { app, dialog } from 'electron';
 import { parseCliArgs } from './cli';
 import { runCli } from './cli-runner';
 import { startDesktopApp } from './desktop';
@@ -43,7 +43,10 @@ if (parsed.kind === 'error') {
   });
 } else {
   void startDesktopApp().catch((err: unknown) => {
-    process.stderr.write(`fatal: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`);
+    const detail = err instanceof Error ? (err.stack ?? err.message) : String(err);
+    process.stderr.write(`fatal: ${detail}\n`);
+    // a GUI app that only writes to stderr just vanishes; showErrorBox is safe before the app is ready
+    dialog.showErrorBox('Trawler could not start', err instanceof Error ? err.message : String(err));
     app.exit(1);
   });
 }

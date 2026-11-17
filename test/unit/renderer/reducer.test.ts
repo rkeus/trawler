@@ -16,7 +16,7 @@ function loaded(over: { history?: HistoryEntry[]; current?: RunningJob | null; l
     settings: snapshot,
     history: over.history ?? [],
     appState,
-    info: { version: '0.1.0', userDataDir: 'C:\\data' },
+    info: { version: '0.1.0', userDataDir: 'C:\\data', startupWarnings: [] },
     current: over.current ?? null,
     last: over.last ?? null,
     at: 1,

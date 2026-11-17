@@ -43,7 +43,7 @@ export function fakeApi() {
     openPreview: vi.fn(async () => null),
     openFolder: vi.fn(async (_dir: string) => null),
     openReport: vi.fn(async (_dir: string) => null),
-    appInfo: vi.fn(async () => ({ version: '0.1.0', userDataDir: 'C:\\data' })),
+    appInfo: vi.fn(async () => ({ version: '0.1.0', userDataDir: 'C:\\data', startupWarnings: [] as string[] })),
     onJobEvent: (listener: (msg: JobEventMessage) => void) => {
       eventListeners.add(listener);
       return () => void eventListeners.delete(listener);

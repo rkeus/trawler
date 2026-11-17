@@ -112,6 +112,8 @@ export interface PreviewInfo {
 export interface AppInfo {
   version: string;
   userDataDir: string;
+  /** problems found while the stores loaded (a damaged file that was moved aside, values that were reset) */
+  startupWarnings: string[];
 }
 
 /** Commands the UI can invoke: arguments and result of each. */

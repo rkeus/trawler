@@ -36,7 +36,7 @@ async function setup(over: Partial<AppServices> = {}) {
       stop: async () => undefined,
       current: () => ({ url: 'http://127.0.0.1:1234/html/', outputDir: dir }),
     },
-    info: { version: '0.0.0', userDataDir: dir },
+    info: { version: '0.0.0', userDataDir: dir, startupWarnings: [] },
     chooseFolder: async () => null,
     openPath: async (target) => {
       opened.push(target);
