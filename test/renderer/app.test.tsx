@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { App } from '../../src/renderer/App';
 import { fakeApi } from '../helpers/fake-api';
 import { historyEntry } from '../helpers/history-entry';
+import { analysisResult } from '../helpers/analysis';
 
 async function open(setup?: (f: ReturnType<typeof fakeApi>) => void) {
   const fake = fakeApi();
@@ -206,5 +207,80 @@ describe('Settings screen', () => {
     await user.click(screen.getByRole('button', { name: 'Moss' }));
     expect(fake.api.updateAppState).toHaveBeenCalledWith({ palette: 'moss' });
     await waitFor(() => expect(document.documentElement.dataset.palette).toBe('moss'));
+  });
+});
+
+describe('Analysis screen', () => {
+  async function openAnalysis(setup?: (f: ReturnType<typeof fakeApi>) => void) {
+    return open((f) => {
+      f.api.lastFinishedJob.mockResolvedValue({ jobId: 'a1', result: analysisResult() });
+      setup?.(f);
+    });
+  }
+
+  it('shows the verdict, the numbers, the reasons and the warnings', async () => {
+    await openAnalysis();
+    expect(await screen.findByText('HYBRID')).toBeTruthy();
+    expect(screen.getByText('0.30')).toBeTruthy();
+    expect(screen.getByText('Framework markers found (React).')).toBeTruthy();
+    expect(screen.getByText('robots.txt disallows /admin/')).toBeTruthy();
+    expect(screen.getByText('cdn.example')).toBeTruthy();
+    expect(screen.getByText('https://example.com/template/about.html')).toBeTruthy();
+  });
+
+  it('applies the recommended settings to the form and marks them', async () => {
+    await openAnalysis();
+    expect(((await screen.findByLabelText(/^Mode/)) as HTMLSelectElement).value).toBe('js');
+    expect((screen.getByLabelText(/^Max pages/) as HTMLInputElement).value).toBe('1000');
+    expect(screen.getAllByText('recommended')).toHaveLength(2);
+  });
+
+  it('filters the page list', async () => {
+    const { user } = await openAnalysis();
+    await user.type(await screen.findByLabelText('Filter pages'), 'blog');
+    expect(screen.queryByText('https://example.com/template/about.html')).toBeNull();
+    expect(screen.getByText('https://example.com/template/blog/post-1.html')).toBeTruthy();
+  });
+
+  it('asks for a folder before downloading', async () => {
+    const { fake, user } = await openAnalysis();
+    await user.click(await screen.findByRole('button', { name: 'Download with these settings' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('Choose an output folder first.');
+    expect(fake.api.startJob).not.toHaveBeenCalled();
+  });
+
+  it('starts the download with the edited settings in the chosen folder', async () => {
+    const { fake, user } = await openAnalysis((f) => f.api.chooseFolder.mockResolvedValue('D:\\out'));
+    await user.click(await screen.findByRole('button', { name: 'Choose output folder' }));
+    await screen.findByText('D:\\out');
+    const depth = screen.getByLabelText(/^Max depth/);
+    await user.clear(depth);
+    await user.type(depth, '3');
+    await user.click(screen.getByRole('button', { name: 'Download with these settings' }));
+    expect(fake.api.startJob).toHaveBeenCalledWith({
+      kind: 'download',
+      seedUrl: 'https://example.com/template/index.html',
+      outputDir: 'D:\\out',
+      settings: { mode: 'js', downloadExternal: true, maxDepth: 3, maxPages: 1000, concurrency: 6, requestDelayMs: 0 },
+    });
+    expect(await screen.findByRole('button', { name: 'Cancel' })).toBeTruthy();
+  });
+
+  it('offers the last used folder and goes back to the start screen', async () => {
+    const { user } = await openAnalysis((f) => f.api.getAppState.mockResolvedValue({ legalNoteAccepted: true, theme: 'dark', palette: 'ember', lastOutputDir: 'D:\\last' }));
+    expect(await screen.findByText('D:\\last')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+    expect(await screen.findByRole('button', { name: 'Analyze' })).toBeTruthy();
+  });
+
+  it('shows no verdict when the mode was chosen by hand', async () => {
+    await open((f) => {
+      const result = analysisResult();
+      delete result.analysis!.detection;
+      delete result.detection;
+      f.api.lastFinishedJob.mockResolvedValue({ jobId: 'a1', result });
+    });
+    expect(await screen.findByRole('button', { name: 'Download with these settings' })).toBeTruthy();
+    expect(screen.queryByText('HYBRID')).toBeNull();
   });
 });

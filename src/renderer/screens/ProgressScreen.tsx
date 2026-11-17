@@ -5,6 +5,7 @@ import { Tag } from '../components/Tag';
 import { displayUrl, formatBytes } from '../state/format';
 import { useApp } from '../state/AppProvider';
 import type { JobView } from '../state/model';
+import { AnalysisScreen } from './AnalysisScreen';
 
 const DOWNLOAD_STEPS: JobPhase[] = ['detecting', 'crawling', 'rewriting', 'verifying', 'done'];
 const ANALYZE_STEPS: JobPhase[] = ['detecting', 'crawling', 'done'];
@@ -157,6 +158,6 @@ function Finished() {
 export function ProgressScreen() {
   const { model } = useApp();
   if (model.job) return <Running job={model.job} />;
-  if (model.finished) return <Finished />;
+  if (model.finished) return model.finished.result.analysis ? <AnalysisScreen /> : <Finished />;
   return null;
 }
