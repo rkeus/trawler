@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { app, dialog, session, shell, type BrowserWindow, type OpenDialogOptions } from 'electron';
+import { app, dialog, Menu, session, shell, type BrowserWindow, type OpenDialogOptions } from 'electron';
 import { sleep, TRAWLER_VERSION } from '../engine';
 import { IPC_EVENTS } from '../shared/ipc';
 import { AppSessions } from './app-sessions';
@@ -44,6 +44,7 @@ export async function startDesktopApp(): Promise<void> {
   app.on('window-all-closed', () => app.quit());
 
   await app.whenReady();
+  Menu.setApplicationMenu(null); // the UI has its own chrome
   session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
 
   const userData = app.getPath('userData');

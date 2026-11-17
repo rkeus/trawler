@@ -14,6 +14,10 @@ export function createMainWindow(): BrowserWindow {
     minWidth: 720,
     minHeight: 520,
     title: 'Trawler',
+    backgroundColor: '#0b0e14',
+    // custom title bar: the UI draws it (src/renderer/shell/TitleBar.tsx); Windows keeps its own buttons on top
+    titleBarStyle: 'hidden',
+    titleBarOverlay: { color: 'rgba(0,0,0,0)', symbolColor: '#8993a8', height: 34 },
     show: false,
     webPreferences: {
       preload: PRELOAD_FILE,
