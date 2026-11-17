@@ -40,6 +40,8 @@ export interface JobManagerDeps {
   run?: typeof runJob;
   now?: () => number;
   newId?: () => string;
+  /** at most one progress event per this many ms reaches the UI (default 100) */
+  progressIntervalMs?: number;
 }
 
 export class JobBusyError extends Error {
@@ -104,6 +106,9 @@ export class JobManager {
   private analysis: AnalysisCache | undefined;
   private closed = false;
   private expiry: NodeJS.Timeout | undefined;
+  private pendingProgress: { jobId: string; event: JobEvent } | undefined;
+  private progressTimer: NodeJS.Timeout | undefined;
+  private lastProgressAt = 0;
 
   constructor(private readonly deps: JobManagerDeps) {}
 
@@ -237,6 +242,7 @@ export class JobManager {
         ...(cancelled ? {} : { error: message(err) }),
       };
     }
+    this.flushProgress(); // the last counters reach the UI before the finished message
     await handle?.dispose().catch(() => undefined);
     if (plan.recording && result.status === 'done') this.keepAnalysis(plan.recording);
     else plan.recording?.cache.clear(); // a cancelled or failed analysis is not kept
@@ -257,12 +263,43 @@ export class JobManager {
   }
 
   private forward(info: RunningJob, event: JobEvent): void {
+    if (event.type === 'progress') {
+      info.counters = { ...event.counters };
+      this.queueProgress(info.jobId, event);
+      return;
+    }
+    this.flushProgress(); // progress that came before this event reaches the UI first
     if (event.type === 'phase') info.phase = event.phase;
-    else if (event.type === 'progress') info.counters = { ...event.counters };
     else if (event.type === 'detection') {
       info.detection = event.detection;
       info.mode = event.mode;
     }
     quietly(() => this.deps.onEvent({ jobId: info.jobId, event }));
+  }
+
+  private queueProgress(jobId: string, event: JobEvent): void {
+    const interval = this.deps.progressIntervalMs ?? 100;
+    const now = Date.now();
+    if (!this.progressTimer && now - this.lastProgressAt >= interval) {
+      this.lastProgressAt = now;
+      quietly(() => this.deps.onEvent({ jobId, event }));
+      return;
+    }
+    this.pendingProgress = { jobId, event }; // only the latest counters matter
+    if (!this.progressTimer) {
+      this.progressTimer = setTimeout(() => this.flushProgress(), Math.max(0, interval - (now - this.lastProgressAt)));
+      this.progressTimer.unref();
+    }
+  }
+
+  /** Sends the pending progress event, if any, and stops the timer. */
+  private flushProgress(): void {
+    if (this.progressTimer) clearTimeout(this.progressTimer);
+    this.progressTimer = undefined;
+    const pending = this.pendingProgress;
+    this.pendingProgress = undefined;
+    if (!pending) return;
+    this.lastProgressAt = Date.now();
+    quietly(() => this.deps.onEvent(pending));
   }
 }

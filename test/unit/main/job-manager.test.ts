@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, it, expect, vi } from 'vitest';
-import { FetchCache, runJob } from '../../../src/engine';
+import { FetchCache, runJob, type JobResult } from '../../../src/engine';
 import { JobBusyError, JobManager, type JobManagerDeps } from '../../../src/main/job-manager';
 import type { HistoryEntry, JobEventMessage, JobFinishedMessage } from '../../../src/shared/ipc';
 import { resolveSettings } from '../../../src/shared/settings';
@@ -60,6 +60,21 @@ function harness(over: Partial<JobManagerDeps> = {}) {
 const seed = () => `${site.url}/html/index.html`;
 
 describe('JobManager', () => {
+  it('coalesces progress events and keeps their order relative to other events', async () => {
+    const zero = { pagesDone: 0, pagesQueued: 0, assetsDone: 0, assetsQueued: 0, bytes: 0, errors: 0 };
+    const run = async (_req: unknown, _ports: unknown, control: { emit: (e: any) => void }): Promise<JobResult> => {
+      for (let i = 1; i <= 500; i++) control.emit({ type: 'progress', counters: { ...zero, pagesDone: i } });
+      control.emit({ type: 'phase', phase: 'rewriting' });
+      control.emit({ type: 'progress', counters: { ...zero, pagesDone: 501 } });
+      return { kind: 'analyze', status: 'done', mode: 'static', counters: zero, warnings: [] };
+    };
+    const h = harness({ run: run as unknown as typeof runJob, progressIntervalMs: 50 });
+    const r = h.manager.start({ kind: 'analyze', seedUrl: seed() });
+    await h.done(r.jobId);
+    const seq = h.events.map((m) => (m.event.type === 'progress' ? `p${m.event.counters.pagesDone}` : m.event.type));
+    expect(seq).toEqual(['p1', 'p500', 'phase', 'p501']);
+  });
+
   it('runs an analysis, forwards its events and records it', async () => {
     const h = harness();
     const { jobId, usesAnalysisCache } = h.manager.start({ kind: 'analyze', seedUrl: seed() });
