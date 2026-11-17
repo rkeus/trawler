@@ -108,7 +108,12 @@ export async function startDesktopApp(): Promise<void> {
     if (quitting) return;
     quitting = true;
     void shutdown().then((outcome) => {
-      if (relaunchAfterQuit) app.relaunch();
+      if (relaunchAfterQuit) {
+        // a portable exe runs from a temp folder its stub deletes on exit: start the stub again instead
+        const portableExe = process.env.PORTABLE_EXECUTABLE_FILE;
+        if (portableExe) app.relaunch({ execPath: portableExe, args: [] });
+        else app.relaunch();
+      }
       if (outcome === timedOut) {
         process.stderr.write('shutdown timed out; exiting\n');
         app.exit(0);

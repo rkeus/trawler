@@ -33,7 +33,10 @@ export async function launchApp(userDataDir: string, appDir: string = ROOT): Pro
   return attach(app);
 }
 
-/** The packaged app: release/win-unpacked/Trawler.exe from `npm run pack`, or the exe named by TRAWLER_EXE. */
+/**
+ * The packaged app: release/win-unpacked/Trawler.exe from `npm run pack`, or the exe named by TRAWLER_EXE.
+ * The installed or unpacked Trawler.exe only; the portable exe is an installer stub that Playwright cannot attach to.
+ */
 export const PACKAGED_EXE = process.env.TRAWLER_EXE ?? path.join(ROOT, 'release', 'win-unpacked', 'Trawler.exe');
 
 /** Starts the packaged app (no source tree involved) with its own profile folder; undefined leaves TRAWLER_USER_DATA unset. */

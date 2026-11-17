@@ -26,11 +26,11 @@ Design spec: `docs/superpowers/specs/2026-11-16-trawler-design.md`
     npm run make-icon
 
 - `npm run pack`: unpacked app in `release/win-unpacked/` (used by the packaged E2E).
-- `npm run dist`: `release/Trawler-Setup-<version>.exe` (NSIS installer, per-user, no admin rights, choose the folder) and `release/Trawler-<version>-portable.exe`.
+- `npm run dist`: `release/Trawler-Setup-<version>.exe` (NSIS installer; per-user by default, choosing 'all users' in the installer asks for administrator rights; choose the folder) and `release/Trawler-<version>-portable.exe`.
 - `npm run test:packaged`: builds the unpacked app and runs the E2E against it.
 - `npm run make-icon`: re-renders `build/icon.png` from `build/icon.svg` (only needed when the logo changes).
 
-The portable exe keeps its settings, history and app state in a `TrawlerData` folder next to it; the installed app uses `%APPDATA%Trawler`. `TRAWLER_USER_DATA=<folder>` overrides both.
+The portable exe keeps its settings, history and app state in a `TrawlerData` folder next to it; the installed app uses `%APPDATA%\Trawler`. `TRAWLER_USER_DATA=<folder>` overrides both.
 
 The build is not code-signed: Windows SmartScreen shows a warning the first time ("More info" then "Run anyway"). Signing needs a certificate and is out of scope.
 
