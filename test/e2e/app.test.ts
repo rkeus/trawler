@@ -205,7 +205,8 @@ describe('Trawler desktop app (real Electron, API level)', () => {
       );
       await run.app
         .evaluate(({ BrowserWindow }) => {
-          // what Windows does on logoff or shutdown
+          // what Windows does on logoff or shutdown; this proves the shared shutdown path. The real OS logoff cannot be
+          // simulated, and Windows may end the process before the manifest is written (best effort)
           BrowserWindow.getAllWindows().find((w) => w.isVisible())?.emit('session-end', { preventDefault: () => undefined });
         })
         .catch(() => undefined); // the app may already be going away

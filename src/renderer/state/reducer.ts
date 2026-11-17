@@ -120,7 +120,7 @@ export function reducer(m: Model, a: Action): Model {
       const entry = a.msg.history;
       const history = entry ? [entry, ...m.history.filter((h) => h.id !== entry.id)] : m.history;
       const finishedErrors = m.job ? m.job.log.filter((l) => l.level === 'error').slice(-MAX_FINISHED_ERRORS) : [];
-      // someone reading the settings is not pulled away; the rail shows the result is there
+      // someone reading the settings is not pulled away; the Progress rail button stays enabled, so the result is one click away
       const screen = m.screen === 'settings' ? 'settings' : 'progress';
       return { ...m, job: null, finished: a.msg, finishedErrors, history, screen };
     }

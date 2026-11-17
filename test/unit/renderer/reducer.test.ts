@@ -126,7 +126,7 @@ describe('reducer', () => {
       settings: snapshot,
       history: [],
       appState,
-      info: { version: '0.1.0', userDataDir: 'C:\data', startupWarnings: ['history.json was damaged'] },
+      info: { version: '0.1.0', userDataDir: 'C:\\data', startupWarnings: ['history.json was damaged'] },
       current: null,
       last: null,
       at: 1,
