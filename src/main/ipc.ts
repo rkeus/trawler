@@ -6,7 +6,7 @@ import { invokeHandler, type Handlers } from './ipc-handlers';
 export function registerIpc(handlers: Handlers, trusted: (event: IpcMainInvokeEvent) => boolean): void {
   for (const [name, channel] of Object.entries(IPC)) {
     ipcMain.handle(channel, (event, ...args: unknown[]) => {
-      if (!trusted(event)) return { ok: false, error: 'Untrusted sender' };
+      if (!trusted(event)) return { ok: false, error: 'Untrusted sender', code: 'untrusted' };
       return invokeHandler(handlers, name, args);
     });
   }

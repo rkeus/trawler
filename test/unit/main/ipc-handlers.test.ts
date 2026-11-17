@@ -58,8 +58,8 @@ describe('IPC handlers', () => {
 
   it('rejects unknown commands, including prototype keys', async () => {
     const { call } = await setup();
-    expect(await call('nope')).toEqual({ ok: false, error: 'Unknown command: nope' });
-    expect(await call('constructor')).toEqual({ ok: false, error: 'Unknown command: constructor' });
+    expect(await call('nope')).toEqual({ ok: false, error: 'Unknown command: nope', code: 'unknown-command' });
+    expect(await call('constructor')).toEqual({ ok: false, error: 'Unknown command: constructor', code: 'unknown-command' });
   });
 
   it('wraps results and errors', async () => {
@@ -74,7 +74,7 @@ describe('IPC handlers', () => {
     });
     expect(await call('appInfo')).toEqual({ ok: true, value: expect.objectContaining({ version: '0.0.0' }) });
     const busy = await call('startJob', { kind: 'analyze', seedUrl: 'https://example.com/' });
-    expect(busy).toEqual({ ok: false, error: expect.stringMatching(/already running/) });
+    expect(busy).toEqual({ ok: false, error: expect.stringMatching(/already running/), code: 'busy' });
   });
 
   it('validates a job request before starting it', async () => {
@@ -88,6 +88,7 @@ describe('IPC handlers', () => {
     ]) {
       expect((await call('startJob', bad)).ok, JSON.stringify(bad)).toBe(false);
     }
+    expect(await call('startJob', { kind: 'steal', seedUrl: 'https://example.com/' })).toMatchObject({ ok: false, code: 'invalid' });
     expect(started).toEqual([]);
   });
 
@@ -136,7 +137,7 @@ describe('IPC handlers', () => {
     const idle = await setup({
       preview: { start: async () => ({ url: '', outputDir: '' }), stop: async () => undefined, current: () => undefined },
     });
-    expect(await idle.call('openPreview')).toEqual({ ok: false, error: 'No preview is running.' });
+    expect(await idle.call('openPreview')).toEqual({ ok: false, error: 'No preview is running.', code: 'failed' });
   });
 
   it('applies a smaller history size right away', async () => {
@@ -162,7 +163,7 @@ describe('IPC handlers', () => {
   it('rejects network and device paths', async () => {
     const { call, opened } = await setup();
     for (const p of ['\\\\host\\share', '//host/share', '\\\\?\\C:\\Windows']) {
-      expect(await call('openFolder', p)).toEqual({ ok: false, error: 'dir: network and device paths are not supported' });
+      expect(await call('openFolder', p)).toEqual({ ok: false, error: 'dir: network and device paths are not supported', code: 'invalid' });
       expect((await call('inspectFolder', p)).ok).toBe(false);
     }
     expect(opened).toEqual([]);

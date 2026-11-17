@@ -6,13 +6,12 @@ import {
   type IpcReply,
   type JobEventMessage,
   type JobFinishedMessage,
-  type TrawlerApi,
+  type TrawlerBridge,
 } from '../shared/ipc';
 
-async function invoke(channel: string, args: unknown[]): Promise<unknown> {
-  const reply = (await ipcRenderer.invoke(channel, ...args)) as IpcReply<unknown>;
-  if (!reply.ok) throw new Error(reply.error);
-  return reply.value;
+/** Commands resolve with the reply itself: the UI's api wrapper turns failures into errors with a code. */
+async function invoke(channel: string, args: unknown[]): Promise<IpcReply<unknown>> {
+  return (await ipcRenderer.invoke(channel, ...args)) as IpcReply<unknown>;
 }
 
 function subscribe<T>(channel: string, listener: (msg: T) => void): () => void {
@@ -25,12 +24,12 @@ function subscribe<T>(channel: string, listener: (msg: T) => void): () => void {
 
 const commands = Object.fromEntries(
   Object.entries(IPC).map(([name, channel]) => [name, (...args: unknown[]) => invoke(channel, args)]),
-) as unknown as Omit<TrawlerApi, 'onJobEvent' | 'onJobFinished'>;
+) as unknown as Omit<TrawlerBridge, 'onJobEvent' | 'onJobFinished'>;
 
-const api: TrawlerApi = {
+const bridge: TrawlerBridge = {
   ...commands,
   onJobEvent: (listener: (msg: JobEventMessage) => void) => subscribe(IPC_EVENTS.jobEvent, listener),
   onJobFinished: (listener: (msg: JobFinishedMessage) => void) => subscribe(IPC_EVENTS.jobFinished, listener),
 };
 
-contextBridge.exposeInMainWorld('trawler', api);
+contextBridge.exposeInMainWorld('trawler', bridge);

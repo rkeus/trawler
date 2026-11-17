@@ -1,10 +1,10 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { inspectOutputDir } from '../engine';
-import type { AppInfo, InvokeContract, InvokeName, IpcReply, StartJobRequest } from '../shared/ipc';
+import type { AppInfo, InvokeContract, InvokeName, IpcErrorCode, IpcReply, StartJobRequest } from '../shared/ipc';
 import type { AppStateStore } from './app-state-store';
 import type { HistoryStore } from './history-store';
-import type { JobManager } from './job-manager';
+import { JobBusyError, type JobManager } from './job-manager';
 import { isRecord } from './json-file';
 import type { PreviewManager } from './preview-manager';
 import type { SettingsStore } from './settings-store';
@@ -28,16 +28,24 @@ export type Handlers = { [K in InvokeName]: (...args: unknown[]) => Promise<Invo
 
 const POLICIES: readonly unknown[] = ['overwrite', 'merge', 'fail'];
 
+/** Bad input from the UI; the reply carries the code "invalid". */
+export class InvalidInputError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'InvalidInputError';
+  }
+}
+
 function text(v: unknown, name: string): string {
-  if (typeof v !== 'string' || v.trim() === '') throw new Error(`${name}: expected a non-empty string`);
+  if (typeof v !== 'string' || v.trim() === '') throw new InvalidInputError(`${name}: expected a non-empty string`);
   return v;
 }
 
 function absolutePath(v: unknown, name: string): string {
   const s = text(v, name);
   // UNC and device paths would make the OS contact other machines (and send credentials) on a stat
-  if (/^[\\/]{2}/.test(s)) throw new Error(`${name}: network and device paths are not supported`);
-  if (!path.isAbsolute(s)) throw new Error(`${name}: expected an absolute path`);
+  if (/^[\\/]{2}/.test(s)) throw new InvalidInputError(`${name}: network and device paths are not supported`);
+  if (!path.isAbsolute(s)) throw new InvalidInputError(`${name}: expected an absolute path`);
   return path.resolve(s);
 }
 
@@ -58,16 +66,16 @@ async function isFile(p: string): Promise<boolean> {
 }
 
 function startRequest(v: unknown): StartJobRequest {
-  if (!isRecord(v)) throw new Error('startJob: expected a job request');
-  if (v.kind !== 'analyze' && v.kind !== 'download') throw new Error('kind: expected "analyze" or "download"');
+  if (!isRecord(v)) throw new InvalidInputError('startJob: expected a job request');
+  if (v.kind !== 'analyze' && v.kind !== 'download') throw new InvalidInputError('kind: expected "analyze" or "download"');
   const req: StartJobRequest = { kind: v.kind, seedUrl: text(v.seedUrl, 'seedUrl') };
   if (v.outputDir !== undefined) req.outputDir = absolutePath(v.outputDir, 'outputDir');
   if (v.folderPolicy !== undefined) {
-    if (!POLICIES.includes(v.folderPolicy)) throw new Error('folderPolicy: expected "overwrite", "merge" or "fail"');
+    if (!POLICIES.includes(v.folderPolicy)) throw new InvalidInputError('folderPolicy: expected "overwrite", "merge" or "fail"');
     req.folderPolicy = v.folderPolicy as StartJobRequest['folderPolicy'];
   }
   if (v.settings !== undefined) {
-    if (!isRecord(v.settings)) throw new Error('settings: expected an object');
+    if (!isRecord(v.settings)) throw new InvalidInputError('settings: expected an object');
     req.settings = v.settings; // every value is validated by resolveSettings
   }
   return req;
@@ -131,13 +139,19 @@ export function createHandlers(s: AppServices): Handlers {
   };
 }
 
+function errorCode(err: unknown): IpcErrorCode {
+  if (err instanceof InvalidInputError) return 'invalid';
+  if (err instanceof JobBusyError) return 'busy';
+  return 'failed';
+}
+
 /** Runs one command and wraps the outcome for the renderer. */
 export async function invokeHandler(handlers: Handlers, name: string, args: unknown[]): Promise<IpcReply<unknown>> {
-  if (!Object.hasOwn(handlers, name)) return { ok: false, error: `Unknown command: ${name}` };
+  if (!Object.hasOwn(handlers, name)) return { ok: false, error: `Unknown command: ${name}`, code: 'unknown-command' };
   try {
     const handler = handlers[name as InvokeName] as (...a: unknown[]) => Promise<unknown>;
     return { ok: true, value: await handler(...args) };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    return { ok: false, error: err instanceof Error ? err.message : String(err), code: errorCode(err) };
   }
 }

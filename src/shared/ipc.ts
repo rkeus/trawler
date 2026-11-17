@@ -163,14 +163,26 @@ export const IPC_EVENTS = {
   jobFinished: 'job:finished',
 } as const;
 
-/** Every command reply is wrapped, so errors reach the UI as plain messages. */
-export type IpcReply<T> = { ok: true; value: T } | { ok: false; error: string };
+export type IpcErrorCode = 'busy' | 'invalid' | 'untrusted' | 'unknown-command' | 'failed';
 
-/** The API the preload exposes as `window.trawler`. */
-export type TrawlerApi = {
-  [K in InvokeName]: (...args: InvokeContract[K]['args']) => Promise<InvokeContract[K]['result']>;
-} & {
+/** Every command reply is wrapped, so errors reach the UI as plain messages with a machine-readable code. */
+export type IpcReply<T> = { ok: true; value: T } | { ok: false; error: string; code: IpcErrorCode };
+
+export interface JobSubscriptions {
   /** returns an unsubscribe function */
   onJobEvent(listener: (msg: JobEventMessage) => void): () => void;
   onJobFinished(listener: (msg: JobFinishedMessage) => void): () => void;
-};
+}
+
+/**
+ * `window.trawler` as the preload exposes it: every command resolves with its reply. Replies are values because
+ * custom Error properties (such as a code) do not survive Electron's context bridge.
+ */
+export type TrawlerBridge = {
+  [K in InvokeName]: (...args: InvokeContract[K]['args']) => Promise<IpcReply<InvokeContract[K]['result']>>;
+} & JobSubscriptions;
+
+/** What the UI code uses: commands resolve with the value and reject with an error that carries a `code` (renderer/api.ts). */
+export type TrawlerApi = {
+  [K in InvokeName]: (...args: InvokeContract[K]['args']) => Promise<InvokeContract[K]['result']>;
+} & JobSubscriptions;

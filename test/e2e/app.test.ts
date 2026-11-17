@@ -110,20 +110,23 @@ describe('Trawler desktop app (real Electron, API level)', () => {
         let resolveDone!: (msg: any) => void;
         const done = new Promise<any>((resolve) => (resolveDone = resolve));
         const off = trawler.onJobFinished((msg: any) => resolveDone(msg));
-        const first = await trawler.startJob({ kind: 'analyze', seedUrl, settings: { mode: 'static' } });
-        let secondError = '';
-        try {
-          await trawler.startJob({ kind: 'analyze', seedUrl });
-        } catch (err) {
-          secondError = String((err as Error).message);
-        }
-        const current = await trawler.currentJob();
-        const cancelled = await trawler.cancelJob(first.jobId);
+        const first = (await trawler.startJob({ kind: 'analyze', seedUrl, settings: { mode: 'static' } })).value;
+        const second = await trawler.startJob({ kind: 'analyze', seedUrl });
+        const current = (await trawler.currentJob()).value;
+        const cancelled = (await trawler.cancelJob(first.jobId)).value;
         const finished = await done;
         off();
-        return { secondError, currentId: current?.jobId, firstId: first.jobId, cancelled, status: finished.result.status };
+        return {
+          secondError: second.ok ? '' : String(second.error),
+          secondCode: second.ok ? '' : String(second.code),
+          currentId: current?.jobId,
+          firstId: first.jobId,
+          cancelled,
+          status: finished.result.status,
+        };
       }, `${slow.url}/slow/`);
       expect(result.secondError).toMatch(/already running/);
+      expect(result.secondCode).toBe('busy');
       expect(result.currentId).toBe(result.firstId);
       expect(result.cancelled).toBe(true);
       expect(result.status).toBe('cancelled');
@@ -131,17 +134,10 @@ describe('Trawler desktop app (real Electron, API level)', () => {
     });
   });
 
-  it('reports bad input as a rejected promise with a plain message', async () => {
+  it('reports bad input as a failed reply with a code and a plain message', async () => {
     await withApp(await makeTmpDir('e2e-profile'), async (run) => {
-      const message = await run.page.evaluate(async () => {
-        try {
-          await (globalThis as any).trawler.openFolder('relative/path');
-          return 'no error';
-        } catch (err) {
-          return (err as Error).message;
-        }
-      });
-      expect(message).toBe('dir: expected an absolute path');
+      const reply = await run.page.evaluate(() => (globalThis as any).trawler.openFolder('relative/path'));
+      expect(reply).toEqual({ ok: false, error: 'dir: expected an absolute path', code: 'invalid' });
     });
   });
 

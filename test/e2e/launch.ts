@@ -25,12 +25,14 @@ export async function launchApp(userDataDir: string, appDir: string = ROOT): Pro
   return { app, page };
 }
 
-/** Calls window.trawler[name](...args) in the UI page. */
-export function api<T = any>(run: AppRun, name: string, ...args: unknown[]): Promise<T> {
-  return run.page.evaluate(
+/** Calls window.trawler[name](...args) in the UI page and unwraps the reply; a failed reply throws its message. */
+export async function api<T = any>(run: AppRun, name: string, ...args: unknown[]): Promise<T> {
+  const reply = (await run.page.evaluate(
     ([n, a]) => (globalThis as any).trawler[n as string](...(a as unknown[])),
     [name, args] as const,
-  ) as Promise<T>;
+  )) as { ok: boolean; value?: T; error?: string };
+  if (!reply.ok) throw new Error(reply.error);
+  return reply.value as T;
 }
 
 /** Starts a job from the UI page and resolves with its start reply, finished message and events. */
@@ -43,7 +45,9 @@ export function runJobInApp(run: AppRun, request: unknown): Promise<{ start: any
     const offEvent = trawler.onJobEvent((msg: any) => events.push(msg));
     const offDone = trawler.onJobFinished((msg: any) => resolveDone(msg));
     try {
-      const start = await trawler.startJob(req);
+      const reply = await trawler.startJob(req);
+      if (!reply.ok) throw new Error(reply.error);
+      const start = reply.value;
       const finished = await done;
       return { start, finished, events };
     } finally {
