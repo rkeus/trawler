@@ -1,17 +1,29 @@
 import { afterAll, beforeAll, describe, it, expect } from 'vitest';
+import { statSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { startFixtureServer, type FixtureServer } from '../helpers/fixture-server';
 import { makeTmpDir } from '../helpers/tmp';
 import { cdnSite, staticSite } from '../fixtures/static-site';
 import { spaSite } from '../fixtures/spa-site';
-import { api, launchPackaged, runJobInApp, type AppRun } from '../e2e/launch';
+import { api, launchPackaged, PACKAGED_EXE, runJobInApp, type AppRun } from '../e2e/launch';
+import { fileURLToPath } from 'node:url';
 import pkg from '../../package.json';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 let cdn: FixtureServer;
 let site: FixtureServer;
 let spa: FixtureServer;
 beforeAll(async () => {
+  // a stale release/win-unpacked would test old code
+  if (!process.env.TRAWLER_EXE) {
+    const asar = statSync(path.join(path.dirname(PACKAGED_EXE), 'resources', 'app.asar'), { throwIfNoEntry: false });
+    const bundle = statSync(path.join(ROOT, 'out', 'main', 'index.cjs'), { throwIfNoEntry: false });
+    if (!asar || !bundle || asar.mtimeMs < bundle.mtimeMs) {
+      throw new Error('release/win-unpacked is older than out/main/index.cjs: run npm run pack');
+    }
+  }
   cdn = await startFixtureServer(() => cdnSite());
   site = await startFixtureServer(() => staticSite(cdn.url));
   spa = await startFixtureServer(() => spaSite());
@@ -61,6 +73,8 @@ describe('Trawler packaged app (release/win-unpacked)', () => {
         settings: { mode: 'static', retries: 0 },
       });
       expect(finished.result.status).toBe('done_with_errors'); // the fixture's missing.png is a real 404
+      expect(finished.result.counters.errors).toBe(1);
+      await fs.access(path.join(out, 'html', 'index.html'));
       await fs.access(path.join(out, '_trawler', 'manifest.json'));
     });
   });

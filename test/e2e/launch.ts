@@ -21,10 +21,16 @@ function cleanEnv(userDataDir: string | undefined, extraEnv: Record<string, stri
   return { ...env, ...extraEnv };
 }
 
+/** Waits for the first window; if that fails the app is closed so no Trawler process is left behind. */
 async function attach(app: ElectronApplication): Promise<AppRun> {
-  const page = await app.firstWindow();
-  await page.waitForLoadState('domcontentloaded');
-  return { app, page };
+  try {
+    const page = await app.firstWindow();
+    await page.waitForLoadState('domcontentloaded');
+    return { app, page };
+  } catch (err) {
+    await app.close().catch(() => undefined);
+    throw err;
+  }
 }
 
 /** Starts the built desktop app with its own profile folder. Run `npm run build:main` first. */
