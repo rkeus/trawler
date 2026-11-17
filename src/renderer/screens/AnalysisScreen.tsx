@@ -23,7 +23,8 @@ export function AnalysisScreen() {
   const finished = model.finished!;
   const analysis = finished.result.analysis!;
   const saved = model.settings!.settings;
-  // the settings the analysis ran with (Start's per-job changes included), else the saved ones; recommendations go on top
+  // the settings the analysis ran with (Start's per-job changes included), else the saved ones; recommendations go on top.
+  // The download sends these too (the form's values win), so the job's other settings (user agent, excludes, ...) are kept.
   const base: Settings = finished.history?.settings ?? saved;
   const recommended = analysis.recommended;
   const [draft, setDraft] = useState<Draft>(() => toDraft({ ...base, ...recommended }));
@@ -59,7 +60,7 @@ export function AnalysisScreen() {
       launcher.setError('Choose an output folder first.');
       return;
     }
-    void launcher.launch({ kind: 'download', seedUrl: analysis.seedUrl, outputDir, settings: parsed.values });
+    void launcher.launch({ kind: 'download', seedUrl: analysis.seedUrl, outputDir, settings: { ...(finished.history?.settings ?? {}), ...parsed.values } });
   }
 
   return (

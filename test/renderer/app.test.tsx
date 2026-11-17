@@ -6,6 +6,7 @@ import { App } from '../../src/renderer/App';
 import { fakeApi } from '../helpers/fake-api';
 import { historyEntry } from '../helpers/history-entry';
 import { analysisResult } from '../helpers/analysis';
+import { resolveSettings } from '../../src/shared/settings';
 import type { JobResult } from '../../src/engine';
 import type { JobFinishedMessage } from '../../src/shared/ipc';
 
@@ -266,6 +267,26 @@ describe('Analysis screen', () => {
       settings: { mode: 'js', downloadExternal: true, maxDepth: 3, maxPages: 1000, concurrency: 6, requestDelayMs: 0 },
     });
     expect(await screen.findByRole('button', { name: 'Cancel' })).toBeTruthy();
+  });
+
+  it('keeps the other settings of the analysis job when downloading', async () => {
+    const { fake, user } = await openAnalysis((f) => {
+      f.api.lastFinishedJob.mockResolvedValue({
+        jobId: 'a1',
+        result: analysisResult(),
+        history: { ...historyEntry('a1', analysisResult()), settings: { ...resolveSettings({}).settings, userAgent: 'Bot/1', mode: 'static' } },
+      });
+      f.api.chooseFolder.mockResolvedValue('D:\out');
+    });
+    await user.click(await screen.findByRole('button', { name: 'Choose output folder' }));
+    await screen.findByText('D:\out');
+    await user.click(screen.getByRole('button', { name: 'Download with these settings' }));
+    expect(fake.api.startJob).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'download',
+        settings: expect.objectContaining({ userAgent: 'Bot/1', maxPages: 1000, mode: 'js' }),
+      }),
+    );
   });
 
   it('offers the last used folder and goes back to the start screen', async () => {
