@@ -11,8 +11,30 @@ Use Trawler only for templates you hold a license for, free/open templates, and 
     npm install
     npm test
     npm run typecheck
+    npm start               # build the main process and launch the app
+    npm run test:electron   # real Electron tests
+    npm run test:e2e        # UI end-to-end tests
+    npm run test:packaged   # E2E against the packaged app (builds it first)
 
 Design spec: `docs/superpowers/specs/2026-11-16-trawler-design.md`
+
+## Building the Windows app
+
+    npm run pack
+    npm run dist
+    npm run test:packaged
+    npm run make-icon
+
+- `npm run pack`: unpacked app in `release/win-unpacked/` (used by the packaged E2E).
+- `npm run dist`: `release/Trawler-Setup-<version>.exe` (NSIS installer, per-user, no admin rights, choose the folder) and `release/Trawler-<version>-portable.exe`.
+- `npm run test:packaged`: builds the unpacked app and runs the E2E against it.
+- `npm run make-icon`: re-renders `build/icon.png` from `build/icon.svg` (only needed when the logo changes).
+
+The portable exe keeps its settings, history and app state in a `TrawlerData` folder next to it; the installed app uses `%APPDATA%Trawler`. `TRAWLER_USER_DATA=<folder>` overrides both.
+
+The build is not code-signed: Windows SmartScreen shows a warning the first time ("More info" then "Run anyway"). Signing needs a certificate and is out of scope.
+
+Bumping the version: change `version` in `package.json` **and** `TRAWLER_VERSION` in `src/engine/version.ts` (a test checks they match).
 
 ## Command line (headless)
 
