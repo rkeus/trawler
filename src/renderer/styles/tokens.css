@@ -1,0 +1,33 @@
+/* Design tokens. Dark is the default; data-theme and data-palette on <html> switch them (see theme.ts). */
+:root {
+  --bg0: #0b0e14; --bg1: #10141d;
+  --glass: rgba(255,255,255,.055); --glass2: rgba(255,255,255,.09); --stroke: rgba(255,255,255,.11);
+  --text: #e8ecf4; --muted: #8993a8; --faint: #5d667a;
+  --ok: #4ade9b; --warn: #ffc857; --err: #ff6b7a;
+  --glow: 0 0 14px rgba(var(--ar), .28);
+  --shadow: 0 10px 40px rgba(0,0,0,.45);
+  --mono: Consolas, "Cascadia Mono", monospace;
+  --a1: #f0955a; --a2: #d9723b; --ar: 240,149,90;
+}
+:root[data-theme="light"] {
+  --bg0: #e9edf5; --bg1: #f6f8fc;
+  --glass: rgba(255,255,255,.6); --glass2: rgba(255,255,255,.85); --stroke: rgba(30,40,70,.12);
+  --text: #182033; --muted: #5a6479; --faint: #8a93a6;
+  --ok: #138a56; --warn: #b7791f; --err: #d03a4c;
+  --glow: 0 0 12px rgba(var(--ar), .22);
+  --shadow: 0 10px 40px rgba(40,60,110,.18);
+  --a1: #b4531c; --a2: #cf6a2e; --ar: 180,83,28;
+}
+/* palettes: --a1 main accent, --a2 a close sibling (same hue), --ar the accent as r,g,b for tints */
+:root[data-palette="ember"] { --a1: #f0955a; --a2: #d9723b; --ar: 240,149,90; }
+:root[data-palette="slate"] { --a1: #8fb3d9; --a2: #6f93bd; --ar: 143,179,217; }
+:root[data-palette="moss"]  { --a1: #9bc28a; --a2: #7ba86a; --ar: 155,194,138; }
+:root[data-palette="sand"]  { --a1: #e3c06b; --a2: #c9a24a; --ar: 227,192,107; }
+:root[data-palette="clay"]  { --a1: #e39aa8; --a2: #c97b8b; --ar: 227,154,168; }
+:root[data-palette="ink"]   { --a1: #d7dce6; --a2: #b4bccb; --ar: 215,220,230; }
+:root[data-theme="light"][data-palette="ember"] { --a1: #b4531c; --a2: #cf6a2e; --ar: 180,83,28; }
+:root[data-theme="light"][data-palette="slate"] { --a1: #35608f; --a2: #4d7aa8; --ar: 53,96,143; }
+:root[data-theme="light"][data-palette="moss"]  { --a1: #3f7a35; --a2: #5a9450; --ar: 63,122,53; }
+:root[data-theme="light"][data-palette="sand"]  { --a1: #8a6a12; --a2: #a98320; --ar: 138,106,18; }
+:root[data-theme="light"][data-palette="clay"]  { --a1: #a8435a; --a2: #c0586f; --ar: 168,67,90; }
+:root[data-theme="light"][data-palette="ink"]   { --a1: #2a3140; --a2: #4a5365; --ar: 42,49,64; }
