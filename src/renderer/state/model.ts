@@ -2,7 +2,7 @@ import type { JobKind, JobPhase, ProgressCounters } from '../../engine';
 import type { AppInfo, AppState, HistoryEntry, JobFinishedMessage, SettingsSnapshot } from '../../shared/ipc';
 import type { Detection } from '../../shared/types';
 
-export type Screen = 'start' | 'progress';
+export type Screen = 'start' | 'progress' | 'settings';
 
 export interface LogLine {
   id: number;
@@ -38,13 +38,18 @@ export interface Model {
   job: JobView | null;
   /** the job that ended last; shown until the user dismisses it */
   finished: JobFinishedMessage | null;
+  /** the error log lines of the job that ended (a job's log is gone once it ends); cleared with the result */
+  finishedErrors: LogLine[];
+  /** problems the stores had while loading; shown on the Start screen until dismissed */
+  startupWarnings: string[];
   screen: Screen;
 }
 
 export const MAX_LOG_LINES = 500;
+export const MAX_FINISHED_ERRORS = 100;
 
 export const ZERO_COUNTERS: ProgressCounters = { pagesDone: 0, pagesQueued: 0, assetsDone: 0, assetsQueued: 0, bytes: 0, errors: 0 };
 
 export function initialModel(): Model {
-  return { ready: false, settings: null, history: [], appState: null, info: null, job: null, finished: null, screen: 'start' };
+  return { ready: false, settings: null, history: [], appState: null, info: null, job: null, finished: null, finishedErrors: [], startupWarnings: [], screen: 'start' };
 }

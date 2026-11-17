@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { initialModel, MAX_LOG_LINES, type Model } from '../../../src/renderer/state/model';
+import { initialModel, MAX_FINISHED_ERRORS, MAX_LOG_LINES, type Model } from '../../../src/renderer/state/model';
 import { reducer } from '../../../src/renderer/state/reducer';
 import type { AppState, HistoryEntry, JobFinishedMessage, RunningJob, SettingsSnapshot } from '../../../src/shared/ipc';
 import { resolveSettings } from '../../../src/shared/settings';
@@ -119,5 +119,48 @@ describe('reducer', () => {
 
   it('keeps a load failure', () => {
     expect(reducer(initialModel(), { type: 'load-failed', message: 'boom' }).loadError).toBe('boom');
+  });
+  it('keeps the startup warnings until they are dismissed', () => {
+    const m = reducer(initialModel(), {
+      type: 'loaded',
+      settings: snapshot,
+      history: [],
+      appState,
+      info: { version: '0.1.0', userDataDir: 'C:\data', startupWarnings: ['history.json was damaged'] },
+      current: null,
+      last: null,
+      at: 1,
+    });
+    expect(m.startupWarnings).toEqual(['history.json was damaged']);
+    expect(reducer(m, { type: 'dismiss-startup-warnings' }).startupWarnings).toEqual([]);
+  });
+
+  it('opens the settings screen at any time and stays there when a job ends', () => {
+    let m = reducer(started(loaded()), { type: 'navigate', screen: 'settings' });
+    expect(m.screen).toBe('settings');
+    m = reducer(m, { type: 'job-finished', msg: { jobId: 'j1', result: { kind: 'analyze', status: 'done', mode: 'static', counters: ZERO, warnings: [] } } });
+    expect(m.screen).toBe('settings');
+    expect(m.finished?.jobId).toBe('j1');
+    expect(reducer(m, { type: 'navigate', screen: 'progress' }).screen).toBe('progress');
+  });
+
+  it('remembers the error lines of the job that ended, and drops them with the result', () => {
+    let m = started(loaded(), 'download');
+    m = reducer(m, { type: 'job-event', msg: { jobId: 'j1', event: { type: 'log', level: 'error', message: 'HTTP 404', url: 'https://example.com/x.png' } }, at: 2 });
+    m = reducer(m, { type: 'job-event', msg: { jobId: 'j1', event: { type: 'log', level: 'info', message: 'fine' } }, at: 3 });
+    m = reducer(m, { type: 'job-finished', msg: { jobId: 'j1', result: { kind: 'download', status: 'done_with_errors', mode: 'static', counters: ZERO, warnings: [] } } });
+    expect(m.finishedErrors.map((l) => l.text)).toEqual(['HTTP 404']);
+    m = reducer(m, { type: 'dismiss-finished' });
+    expect(m.finishedErrors).toEqual([]);
+  });
+
+  it('keeps at most MAX_FINISHED_ERRORS error lines', () => {
+    let m = started(loaded(), 'download');
+    for (let i = 0; i < MAX_FINISHED_ERRORS + 5; i++) {
+      m = reducer(m, { type: 'job-event', msg: { jobId: 'j1', event: { type: 'log', level: 'error', message: `e${i}` } }, at: i });
+    }
+    m = reducer(m, { type: 'job-finished', msg: { jobId: 'j1', result: { kind: 'download', status: 'done_with_errors', mode: 'static', counters: ZERO, warnings: [] } } });
+    expect(m.finishedErrors).toHaveLength(MAX_FINISHED_ERRORS);
+    expect(m.finishedErrors.at(-1)?.text).toBe(`e${MAX_FINISHED_ERRORS + 4}`);
   });
 });

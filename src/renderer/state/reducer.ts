@@ -9,7 +9,7 @@ import type {
   SettingsSnapshot,
   StartJobResponse,
 } from '../../shared/ipc';
-import { MAX_LOG_LINES, ZERO_COUNTERS, type JobView, type LogLine, type Model, type Screen } from './model';
+import { MAX_FINISHED_ERRORS, MAX_LOG_LINES, ZERO_COUNTERS, type JobView, type LogLine, type Model, type Screen } from './model';
 
 export type Action =
   | {
@@ -30,7 +30,8 @@ export type Action =
   | { type: 'job-event'; msg: JobEventMessage; at: number }
   | { type: 'job-finished'; msg: JobFinishedMessage }
   | { type: 'navigate'; screen: Screen }
-  | { type: 'dismiss-finished' };
+  | { type: 'dismiss-finished' }
+  | { type: 'dismiss-startup-warnings' };
 
 function addLog(job: JobView, at: number, level: LogLine['level'], text: string, url?: string): JobView {
   const line: LogLine = { id: job.nextLogId, at, level, text, ...(url ? { url } : {}) };
@@ -58,7 +59,7 @@ function viewFromRunning(r: RunningJob): JobView {
 export function reducer(m: Model, a: Action): Model {
   switch (a.type) {
     case 'loaded': {
-      const base: Model = { ...m, ready: true, settings: a.settings, history: a.history, appState: a.appState, info: a.info };
+      const base: Model = { ...m, ready: true, settings: a.settings, history: a.history, appState: a.appState, info: a.info, startupWarnings: [...a.info.startupWarnings] };
       if (a.current) {
         const job = addLog(viewFromRunning(a.current), a.at, 'info', 'Reconnected to the running job.');
         return { ...base, job, finished: null, screen: 'progress' };
@@ -87,7 +88,7 @@ export function reducer(m: Model, a: Action): Model {
         nextLogId: 0,
       };
       const text = a.response.usesAnalysisCache ? 'Job started (reusing the pages of the last analysis)' : 'Job started';
-      return { ...m, job: addLog(view, a.at, 'info', text), finished: null, screen: 'progress' };
+      return { ...m, job: addLog(view, a.at, 'info', text), finished: null, finishedErrors: [], screen: 'progress' };
     }
     case 'job-event': {
       const job = m.job;
@@ -118,12 +119,17 @@ export function reducer(m: Model, a: Action): Model {
       if (m.job && m.job.jobId !== a.msg.jobId) return m;
       const entry = a.msg.history;
       const history = entry ? [entry, ...m.history.filter((h) => h.id !== entry.id)] : m.history;
-      return { ...m, job: null, finished: a.msg, history, screen: 'progress' };
+      const finishedErrors = m.job ? m.job.log.filter((l) => l.level === 'error').slice(-MAX_FINISHED_ERRORS) : [];
+      // someone reading the settings is not pulled away; the rail shows the result is there
+      const screen = m.screen === 'settings' ? 'settings' : 'progress';
+      return { ...m, job: null, finished: a.msg, finishedErrors, history, screen };
     }
     case 'navigate':
       if (a.screen === 'progress' && !m.job && !m.finished) return m;
       return { ...m, screen: a.screen };
     case 'dismiss-finished':
-      return { ...m, finished: null, screen: 'start' };
+      return { ...m, finished: null, finishedErrors: [], screen: 'start' };
+    case 'dismiss-startup-warnings':
+      return { ...m, startupWarnings: [] };
   }
 }

@@ -13,6 +13,11 @@ const ICONS: Record<Screen, ReactElement> = {
       <path d="M3 12h4l3-8 4 16 3-8h4" />
     </svg>
   ),
+  settings: (
+    <svg viewBox="0 0 24 24">
+      <path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M6 14v6" />
+    </svg>
+  ),
 };
 
 const ITEMS: { screen: Screen; label: string }[] = [
