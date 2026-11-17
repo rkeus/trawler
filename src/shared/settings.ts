@@ -32,6 +32,12 @@ export interface Settings {
   nonEmptyFolder: NonEmptyFolderPolicy;
   verifyAfterDownload: boolean;
   historySize: number;
+  /** how long the pages and stylesheets an analysis fetched stay reusable by the next download of the same URL; 0 = never */
+  analysisCacheTtlMs: number;
+  /** memory budget for those reusable bodies; 0 = keep nothing */
+  analysisCacheMaxBytes: number;
+  /** desktop app: how long quitting waits for a running job to cancel and clean up before the app exits anyway */
+  shutdownTimeoutMs: number;
   detection: {
     thresholds: DetectionThresholds;
     weights: DetectionWeights;
@@ -63,6 +69,9 @@ const DEFAULTS: Settings = {
   nonEmptyFolder: 'ask',
   verifyAfterDownload: true,
   historySize: 20,
+  analysisCacheTtlMs: 1800000,
+  analysisCacheMaxBytes: 67108864,
+  shutdownTimeoutMs: 10000,
   detection: {
     thresholds: { static: 0.3, js: 0.6 },
     weights: { emptyMount: 0.3, textRatio: 0.25, frameworkMarkers: 0.3, dataRequests: 0.1, moduleScripts: 0.05 },
@@ -79,6 +88,17 @@ function deepFreeze<T>(value: T): T {
 
 /** Deep-frozen defaults. Never mutate; resolveSettings() returns a deep clone. */
 export const DEFAULT_SETTINGS: Readonly<Settings> = deepFreeze(DEFAULTS);
+
+/**
+ * Settings of the app itself, not of one job. Per-job changes (recommended settings, Repeat with a history entry's
+ * settings) never change them: the saved values always apply.
+ */
+export const APP_SETTING_KEYS = [
+  'historySize',
+  'analysisCacheTtlMs',
+  'analysisCacheMaxBytes',
+  'shutdownTimeoutMs',
+] as const satisfies readonly (keyof Settings)[];
 
 export interface ResolvedSettings {
   settings: Settings;
@@ -99,7 +119,10 @@ type IntKey =
   | 'memoryBodyLimitBytes'
   | 'challengeTimeoutMs'
   | 'analyzeRenderPages'
-  | 'historySize';
+  | 'historySize'
+  | 'analysisCacheTtlMs'
+  | 'analysisCacheMaxBytes'
+  | 'shutdownTimeoutMs';
 
 const INT_RANGES: Record<IntKey, [number, number]> = {
   maxDepth: [0, 50],
@@ -116,6 +139,9 @@ const INT_RANGES: Record<IntKey, [number, number]> = {
   challengeTimeoutMs: [5000, 300000],
   analyzeRenderPages: [1, 100],
   historySize: [0, 500],
+  analysisCacheTtlMs: [0, 86400000],
+  analysisCacheMaxBytes: [0, 1073741824],
+  shutdownTimeoutMs: [1000, 120000],
 };
 
 type BoolKey = 'downloadExternal' | 'autoScroll' | 'respectRobotsTxt' | 'rewriteJsAbsoluteUrls' | 'verifyAfterDownload';
