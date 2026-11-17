@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import type { ConcreteFolderPolicy, JobKind } from '../../engine';
-import type { HistoryEntry, StartJobRequest } from '../../shared/ipc';
+import type { JobKind } from '../../engine';
+import type { HistoryEntry } from '../../shared/ipc';
 import type { Mode } from '../../shared/types';
 import { errorText } from '../api';
 import { LogoMark } from '../components/Logo';
@@ -8,6 +8,7 @@ import { Seg } from '../components/Seg';
 import { Switch } from '../components/Switch';
 import { useApp } from '../state/AppProvider';
 import { buildStartRequest } from '../state/start-request';
+import { useLauncher } from '../state/useLauncher';
 import { FolderPolicyDialog } from './FolderPolicyDialog';
 import { RecentList } from './RecentList';
 
@@ -18,7 +19,8 @@ const MODES: { value: Mode; label: string }[] = [
 ];
 
 export function StartScreen() {
-  const { model, api, dispatch, startJob } = useApp();
+  const { model, api, dispatch } = useApp();
+  const { error, setError, pending, launch, choosePolicy, cancelPending } = useLauncher();
   const settings = model.settings!.settings;
   const appState = model.appState!;
   const busy = model.job !== null;
@@ -27,25 +29,6 @@ export function StartScreen() {
   const [outputDir, setOutputDir] = useState<string | undefined>(appState.lastOutputDir);
   const [mode, setMode] = useState<Mode>(settings.mode);
   const [external, setExternal] = useState(settings.downloadExternal);
-  const [error, setError] = useState('');
-  const [pending, setPending] = useState<StartJobRequest | null>(null);
-
-  /** Starts a job. A download into a non-empty folder asks first when the setting says "ask". */
-  async function launch(request: StartJobRequest): Promise<void> {
-    setError('');
-    try {
-      if (request.kind === 'download' && request.outputDir && !request.folderPolicy) {
-        const policy = request.settings && 'nonEmptyFolder' in request.settings ? request.settings.nonEmptyFolder : settings.nonEmptyFolder;
-        if (policy === 'ask' && (await api.inspectFolder(request.outputDir)) === 'non-empty') {
-          setPending(request);
-          return;
-        }
-      }
-      await startJob(request);
-    } catch (err) {
-      setError(errorText(err));
-    }
-  }
 
   function submit(kind: JobKind): void {
     const built = buildStartRequest({ kind, url, outputDir, mode, downloadExternal: external });
@@ -54,12 +37,6 @@ export function StartScreen() {
       return;
     }
     void launch(built.request);
-  }
-
-  function choosePolicy(policy: ConcreteFolderPolicy): void {
-    const request = pending;
-    setPending(null);
-    if (request) void launch({ ...request, folderPolicy: policy });
   }
 
   async function chooseFolder(): Promise<void> {
@@ -214,7 +191,7 @@ export function StartScreen() {
         onClear={() => void guarded(async () => dispatch({ type: 'history', entries: await api.clearHistory() }))}
       />
 
-      {pending && <FolderPolicyDialog dir={pending.outputDir!} onChoose={choosePolicy} onCancel={() => setPending(null)} />}
+      {pending && <FolderPolicyDialog dir={pending.outputDir!} onChoose={choosePolicy} onCancel={cancelPending} />}
     </>
   );
 }
