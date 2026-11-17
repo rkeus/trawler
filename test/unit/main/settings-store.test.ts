@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { mergeSettings, settingsOverrides, SettingsStore } from '../../../src/main/settings-store';
+import { mergeSettings, settingsOverrides, SettingsStore, withoutAppSettings } from '../../../src/main/settings-store';
 import { DEFAULT_SETTINGS, resolveSettings } from '../../../src/shared/settings';
 import { makeTmpDir } from '../../helpers/tmp';
 
@@ -100,5 +100,13 @@ describe('SettingsStore', () => {
     const snap = await new SettingsStore(SettingsStore.fileIn(dir)).load();
     expect(snap.settings.maxPages).toBe(500);
     expect(snap.warnings).toHaveLength(1);
+  });
+});
+
+describe('withoutAppSettings', () => {
+  it('drops app-level keys from a per-job patch and leaves other values alone', () => {
+    expect(withoutAppSettings({ historySize: 1, analysisCacheTtlMs: 0, maxPages: 3 })).toEqual({ maxPages: 3 });
+    expect(withoutAppSettings(undefined)).toBeUndefined();
+    expect(withoutAppSettings('x')).toBe('x');
   });
 });

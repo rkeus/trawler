@@ -1,6 +1,6 @@
 import path from 'node:path';
 import type { SettingsSnapshot } from '../shared/ipc';
-import { DEFAULT_SETTINGS, resolveSettings, type ResolvedSettings, type Settings } from '../shared/settings';
+import { APP_SETTING_KEYS, DEFAULT_SETTINGS, resolveSettings, type ResolvedSettings, type Settings } from '../shared/settings';
 import { isRecord, readJsonFile, writeJsonFile, WriteQueue } from './json-file';
 
 const defaults = (): Settings => structuredClone(DEFAULT_SETTINGS) as Settings;
@@ -21,6 +21,14 @@ export function mergeSettings(base: Settings, patch: unknown): ResolvedSettings 
     };
   }
   return resolveSettings(merged);
+}
+
+/** A per-job patch without the app-level keys (APP_SETTING_KEYS); anything that is not an object is returned as is. */
+export function withoutAppSettings(patch: unknown): unknown {
+  if (!isRecord(patch)) return patch;
+  const out: Record<string, unknown> = { ...patch };
+  for (const key of APP_SETTING_KEYS) delete out[key];
+  return out;
 }
 
 /** The values that differ from the defaults. Only these are saved, so later default changes reach everyone else. */

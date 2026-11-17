@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { DEFAULT_SETTINGS, resolveSettings, compileExcludePatterns } from '../../../src/shared/settings';
+import { APP_SETTING_KEYS, DEFAULT_SETTINGS, resolveSettings, compileExcludePatterns } from '../../../src/shared/settings';
 
 describe('resolveSettings', () => {
   it('returns defaults for undefined input', () => {
@@ -38,6 +38,7 @@ describe('resolveSettings', () => {
       historySize: 20,
       analysisCacheTtlMs: 1800000,
       analysisCacheMaxBytes: 67108864,
+      shutdownTimeoutMs: 10000,
       detection: {
         thresholds: { static: 0.3, js: 0.6 },
         weights: { emptyMount: 0.3, textRatio: 0.25, frameworkMarkers: 0.3, dataRequests: 0.1, moduleScripts: 0.05 },
@@ -50,6 +51,10 @@ describe('resolveSettings', () => {
     expect(settings.concurrency).toBe(32);
     expect(settings.maxDepth).toBe(0);
     expect(warnings).toHaveLength(2);
+  });
+
+  it('lists the app-level settings that a single job cannot change', () => {
+    expect([...APP_SETTING_KEYS].sort()).toEqual(['analysisCacheMaxBytes', 'analysisCacheTtlMs', 'historySize', 'shutdownTimeoutMs']);
   });
 
   it('clamps the analysis cache settings', () => {
