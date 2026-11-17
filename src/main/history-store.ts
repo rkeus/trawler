@@ -99,7 +99,7 @@ export class HistoryStore {
   /** Applies a smaller historySize right away. */
   async trim(limit: number): Promise<HistoryEntry[]> {
     const max = Math.max(0, limit);
-    if (this.entries.length > max) await this.commit((entries) => entries.slice(0, max));
+    await this.commit((entries) => (entries.length > max ? entries.slice(0, max) : entries));
     return this.list();
   }
 

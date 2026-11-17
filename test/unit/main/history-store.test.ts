@@ -152,4 +152,30 @@ describe('HistoryStore', () => {
     await expect(store.add(historyEntry('a'), 20)).rejects.toThrow();
     expect(store.list()).toEqual([]);
   });
+
+  it('trims a list that a pending add just filled', async () => {
+    const { dir, store } = await loaded();
+    const a = store.add(historyEntry('a'), 20);
+    const t = store.trim(0);
+    await Promise.all([a, t]);
+    expect(store.list()).toEqual([]);
+    const fresh = new HistoryStore(HistoryStore.fileIn(dir));
+    await fresh.load();
+    expect(fresh.list()).toEqual([]);
+  });
+
+  it.each(['remove', 'clear', 'trim'] as const)('keeps the list in memory when %s cannot write', async (op) => {
+    const dir = await makeTmpDir('history');
+    const sub = path.join(dir, 'sub');
+    await fs.mkdir(sub);
+    const store = new HistoryStore(HistoryStore.fileIn(sub));
+    await store.load();
+    await store.add(historyEntry('a'), 20);
+    await store.add(historyEntry('b'), 20);
+    await fs.rm(sub, { recursive: true });
+    await fs.writeFile(sub, 'x');
+    const call = op === 'remove' ? store.remove('a') : op === 'clear' ? store.clear() : store.trim(1);
+    await expect(call).rejects.toThrow();
+    expect(store.list().map((e) => e.id).sort()).toEqual(['a', 'b']);
+  });
 });
