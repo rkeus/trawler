@@ -51,7 +51,7 @@ body { margin: 0; background: #05070b; font: 13px/1.4 "Segoe UI Variable", "Sego
 .logo-tile { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; color: var(--a1); margin-bottom: 8px;
   background: rgba(var(--ar), .12); border: 1px solid rgba(var(--ar), .45); box-shadow: var(--glow); }
 .logo-tile svg { width: 28px; height: 28px; stroke-width: 2.4; }
-.brandhead { display: flex; align-items: center; gap: 16px; margin: 2px 0 14px; }
+.brandhead { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 2px 0 14px; padding-left: 4px; }
 .logo-big { width: 68px; height: 68px; border-radius: 18px; display: grid; place-items: center; color: var(--a1); flex: none;
   background: rgba(var(--ar), .12); border: 1px solid rgba(var(--ar), .45); box-shadow: var(--glow); }
 .logo-big svg { width: 48px; height: 48px; stroke-width: 2.2; }
@@ -82,17 +82,20 @@ svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width:
 .stage { position: relative; z-index: 1; padding: 6px 16px 10px 8px; overflow: hidden; }
 .screen { position: absolute; inset: 6px 16px 10px 8px; opacity: 0; transform: translateY(10px) scale(.992); pointer-events: none; transition: opacity .35s ease, transform .35s cubic-bezier(.2,.8,.2,1); overflow: auto; padding: 2px; }
 .screen.on { opacity: 1; transform: none; pointer-events: auto; }
-/* custom scrollbars: thin rail, glass thumb with an accent edge that wakes up on hover */
+/* custom scrollbars: a sonar-style ruler track with tick marks, and a tinted thumb with a grip line */
 .screen, .scroll, .log { scrollbar-gutter: stable; }
-.screen::-webkit-scrollbar, .scroll::-webkit-scrollbar, .log::-webkit-scrollbar { width: 10px; height: 10px; }
-.screen::-webkit-scrollbar-track, .scroll::-webkit-scrollbar-track, .log::-webkit-scrollbar-track { background: transparent; margin: 6px 0; }
+.screen::-webkit-scrollbar, .scroll::-webkit-scrollbar, .log::-webkit-scrollbar { width: 14px; height: 14px; }
+.screen::-webkit-scrollbar-button, .scroll::-webkit-scrollbar-button, .log::-webkit-scrollbar-button { display: none; }
+.screen::-webkit-scrollbar-track, .scroll::-webkit-scrollbar-track, .log::-webkit-scrollbar-track {
+  margin: 4px 0; background: repeating-linear-gradient(to bottom, rgba(var(--ar), .16) 0 1px, transparent 1px 7px) center / 6px 100% no-repeat,
+    repeating-linear-gradient(to bottom, rgba(var(--ar), .38) 0 1px, transparent 1px 35px) center / 10px 100% no-repeat; }
 .screen::-webkit-scrollbar-thumb, .scroll::-webkit-scrollbar-thumb, .log::-webkit-scrollbar-thumb {
-  background: var(--glass2); border: 3px solid transparent; background-clip: padding-box; border-radius: 8px;
-  box-shadow: inset 0 0 0 1px var(--stroke); transition: background .2s;
-}
-.screen::-webkit-scrollbar-thumb:hover, .scroll::-webkit-scrollbar-thumb:hover, .log::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, var(--a1), var(--a2)); background-clip: padding-box;
-}
+  border: 3px solid transparent; border-radius: 9px; background-clip: padding-box;
+  background-color: rgba(var(--ar), .22); box-shadow: inset 0 0 0 1px rgba(var(--ar), .6);
+  background-image: linear-gradient(var(--a1), var(--a1)); background-size: 2px 14px; background-position: center; background-repeat: no-repeat; }
+.screen::-webkit-scrollbar-thumb:hover, .scroll::-webkit-scrollbar-thumb:hover, .log::-webkit-scrollbar-thumb:hover,
+.screen::-webkit-scrollbar-thumb:active, .scroll::-webkit-scrollbar-thumb:active, .log::-webkit-scrollbar-thumb:active {
+  background-color: rgba(var(--ar), .42); box-shadow: inset 0 0 0 1px var(--a1); }
 .screen::-webkit-scrollbar-corner, .scroll::-webkit-scrollbar-corner, .log::-webkit-scrollbar-corner { background: transparent; }
 
 .status { grid-column: 1 / 3; z-index: 2; display: flex; gap: 14px; align-items: center; padding: 0 14px; font-size: 11px; color: var(--faint); border-top: 1px solid var(--stroke); }
@@ -184,7 +187,6 @@ ul.plain { margin: 0; padding-left: 16px; color: var(--muted); } ul.plain li { m
   <div class="titlebar"><svg class="brand" viewBox="1.75 -3 48 54"><path d="M16.75 12l-10 9 10 9"/><path d="M34.75 12l10 9-10 9"/><circle cx="30.6" cy="1.5" r="2"/><path d="M30.1 3.5L21.5 38a5.5 5.5 0 0010.6 2.6l1.4-4.6"/><path d="M33.5 36l-3.6 1.6"/></svg><b>TRAWLER</b><span>website template downloader</span><span class="sp"></span><i></i><i></i><i></i></div>
 
   <nav class="rail">
-    <div class="logo-tile" title="Trawler"><svg viewBox="1.75 -3 48 54"><path d="M16.75 12l-10 9 10 9"/><path d="M34.75 12l10 9-10 9"/><circle cx="30.6" cy="1.5" r="2"/><path d="M30.1 3.5L21.5 38a5.5 5.5 0 0010.6 2.6l1.4-4.6"/><path d="M33.5 36l-3.6 1.6"/></svg></div>
     <button class="on" data-s="start" title="Start"><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 19h14"/></svg></button>
     <button data-s="analysis" title="Analysis"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4-4"/></svg></button>
     <button data-s="progress" title="Progress"><svg viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></button>
@@ -197,8 +199,8 @@ ul.plain { margin: 0; padding-left: 16px; color: var(--muted); } ul.plain li { m
     <!-- A -->
     <section class="screen on" id="start">
       <div class="brandhead">
-        <div class="logo-big"><svg viewBox="1.75 -3 48 54"><path d="M16.75 12l-10 9 10 9"/><path d="M34.75 12l10 9-10 9"/><circle cx="30.6" cy="1.5" r="2"/><path d="M30.1 3.5L21.5 38a5.5 5.5 0 0010.6 2.6l1.4-4.6"/><path d="M33.5 36l-3.6 1.6"/></svg></div>
         <div><div class="name">TRAWLER</div><div class="tag-line">Cast a URL. Haul back the whole template.</div></div>
+        <div class="logo-big"><svg viewBox="1.75 -3 48 54"><path d="M16.75 12l-10 9 10 9"/><path d="M34.75 12l10 9-10 9"/><circle cx="30.6" cy="1.5" r="2"/><path d="M30.1 3.5L21.5 38a5.5 5.5 0 0010.6 2.6l1.4-4.6"/><path d="M33.5 36l-3.6 1.6"/></svg></div>
       </div>
       <div class="glass notice"><span>Use Trawler only on templates you own a license for, free templates, or your own sites.</span><span class="sp"></span><button class="btn sm">Got it</button></div>
       <div class="glass cmd">
