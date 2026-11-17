@@ -12,17 +12,34 @@ export interface AppRun {
   page: Page;
 }
 
-/** Starts the built desktop app with its own profile folder. Run `npm run build:main` first. */
-export async function launchApp(userDataDir: string, appDir: string = ROOT): Promise<AppRun> {
+function cleanEnv(userDataDir: string): Record<string, string> {
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) {
     if (value !== undefined && key !== 'ELECTRON_RUN_AS_NODE') env[key] = value;
   }
   env.TRAWLER_USER_DATA = userDataDir;
-  const app = await _electron.launch({ executablePath: ELECTRON, args: [appDir], cwd: appDir, env });
+  return env;
+}
+
+async function attach(app: ElectronApplication): Promise<AppRun> {
   const page = await app.firstWindow();
   await page.waitForLoadState('domcontentloaded');
   return { app, page };
+}
+
+/** Starts the built desktop app with its own profile folder. Run `npm run build:main` first. */
+export async function launchApp(userDataDir: string, appDir: string = ROOT): Promise<AppRun> {
+  const app = await _electron.launch({ executablePath: ELECTRON, args: [appDir], cwd: appDir, env: cleanEnv(userDataDir) });
+  return attach(app);
+}
+
+/** The packaged app: release/win-unpacked/Trawler.exe from `npm run pack`, or the exe named by TRAWLER_EXE. */
+export const PACKAGED_EXE = process.env.TRAWLER_EXE ?? path.join(ROOT, 'release', 'win-unpacked', 'Trawler.exe');
+
+/** Starts the packaged app (no source tree involved) with its own profile folder. */
+export async function launchPackaged(userDataDir: string): Promise<AppRun> {
+  const app = await _electron.launch({ executablePath: PACKAGED_EXE, args: [], env: cleanEnv(userDataDir) });
+  return attach(app);
 }
 
 /** Calls window.trawler[name](...args) in the UI page and unwraps the reply; a failed reply throws its message. */
