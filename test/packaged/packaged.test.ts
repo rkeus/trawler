@@ -85,4 +85,15 @@ describe('Trawler packaged app (release/win-unpacked)', () => {
       expect(await run.page.evaluate(() => document.documentElement.dataset.palette)).toBe('ember');
     });
   });
+
+  it('keeps its data in TrawlerData beside a portable exe', async () => {
+    const portableDir = await makeTmpDir('pk-portable');
+    const run = await launchPackaged(undefined, { PORTABLE_EXECUTABLE_DIR: portableDir });
+    try {
+      const info = await api(run, 'appInfo');
+      expect(path.resolve(info.userDataDir)).toBe(path.resolve(portableDir, 'TrawlerData'));
+    } finally {
+      await run.app.close();
+    }
+  });
 });

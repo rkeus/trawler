@@ -1,4 +1,3 @@
-import path from 'node:path';
 import { app, dialog, Menu, session, shell, type BrowserWindow, type OpenDialogOptions } from 'electron';
 import { sleep, TRAWLER_VERSION } from '../engine';
 import { IPC_EVENTS } from '../shared/ipc';
@@ -20,8 +19,8 @@ import { createMainWindow, RENDERER_DIR } from './window';
  * TRAWLER_USER_DATA overrides the profile folder (tests); a portable exe keeps it in TrawlerData beside the exe.
  */
 export async function startDesktopApp(): Promise<void> {
-  const override = process.env.TRAWLER_USER_DATA;
-  if (override) app.setPath('userData', path.resolve(override));
+  const userDataDir = chooseUserDataDir(process.env);
+  if (userDataDir) app.setPath('userData', userDataDir);
   if (!app.requestSingleInstanceLock()) {
     app.quit();
     return;
