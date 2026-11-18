@@ -1,69 +1,73 @@
+<div align="center">
+
 # Trawler
 
-Desktop app that mirrors a website template — static or JavaScript-rendered — into a local folder, keeping the server's folder structure. It detects the template's architecture automatically and offers an Analyze (dry-run) step before downloading.
+**Cast a URL. Haul back the whole template.**
+
+![License: MIT](https://img.shields.io/badge/license-MIT-green)
+![Platform: Windows](https://img.shields.io/badge/platform-Windows-blue)
+![Electron + TypeScript](https://img.shields.io/badge/built%20with-Electron%20%2B%20TypeScript-f0955a)
+
+</div>
+
+Trawler is a desktop app that mirrors a website template, static or built by JavaScript, into a folder on your disk. It keeps the server's folder structure, so the copy works offline and opens the same way as the original.
+
+## Features
+
+- **Detects the architecture for you.** Static HTML, server-rendered, or built by JavaScript: Trawler scores the page and picks the right mode (you can force Static or JS).
+- **Analyze first.** A dry run counts pages, assets and external hosts, and recommends settings before anything is written.
+- **Checks its own work.** After a download every page is verified for missing files, and the result opens in a local preview.
+- **Polite to servers.** Adjustable parallelism and delay, `Retry-After` backoff on rate limits, `robots.txt` respected by default.
+- **Handles bot-protection pages** that a normal browser can pass, using a hidden browser window in the same session.
+- **Recent list and repeat.** Run a past job again with the same settings, open its folder or preview it.
+- **Everything is a setting.** Depth, page limit, timeouts, user agent, excludes and more, each with a safe default.
+- **Headless mode** for scripts, with JSON progress events and exit codes.
+
+## Download
+
+Get the latest build from the [Releases](../../releases) page:
+
+| File | What it is |
+| --- | --- |
+| `Trawler-Setup-x.y.z.exe` | Installer. Per-user by default, you choose the folder. |
+| `Trawler-x.y.z-portable.exe` | No install. Keeps its data in a `TrawlerData` folder next to it. |
+
+> **The builds are not code-signed.** Windows SmartScreen shows a warning the first time: click *More info*, then *Run anyway*.
+
+## How to use it
+
+1. Paste the template's demo URL, for example its `index.html`.
+2. Press **Analyze** to see what Trawler would download, and adjust the settings.
+3. Choose an output folder and press **Download**.
+4. Open the folder, or press **Preview** to run the copy in your browser.
 
 ## Legal
 
-Use Trawler only for templates you hold a license for, free/open templates, and your own sites. Mirroring a paid template's demo without a license infringes the author's copyright.
+> Use Trawler only on templates you hold a license for, free or open templates, and your own sites. Mirroring a paid template's demo without a license infringes the author's copyright. Respect each site's terms of use. You are responsible for what you download.
+
+## Command line
+
+```
+npm start -- --trawler-cli --url https://example.com/template/ --out ./mirror
+npm start -- --trawler-cli --kind analyze --url https://example.com/template/
+```
+
+Options: `--kind download|analyze`, `--mode auto|static|js`, `--policy overwrite|merge|fail`, `--settings '<json>'`. Progress goes to stderr as JSON lines; the result is one line starting with `TRAWLER_RESULT `. Exit codes: `0` done, `1` failed, `2` cancelled, `64` bad arguments. More in [docs/BUILDING.md](docs/BUILDING.md).
 
 ## Development
 
-    npm install
-    npm test
-    npm run typecheck
-    npm start               # build the main process and launch the app
-    npm run test:electron   # real Electron tests
-    npm run test:e2e        # UI end-to-end tests
-    npm run test:packaged   # E2E against the packaged app (builds it first)
+```
+npm install
+npm test                # unit + Node integration
+npm run typecheck
+npm start               # build the main process and launch the app
+npm run test:electron   # real Electron tests
+npm run test:e2e        # UI end-to-end tests
+npm run dist            # installer + portable exe in release/
+```
 
-Design spec: `docs/superpowers/specs/2026-11-16-trawler-design.md`
+Built with Electron, TypeScript, React and Vite. Building, packaging and headless details are in [docs/BUILDING.md](docs/BUILDING.md). The design is in [docs/development/design.md](docs/development/design.md), with the implementation plans next to it.
 
-## Building the Windows app
+## License
 
-    npm run pack
-    npm run dist
-    npm run test:packaged
-    npm run make-icon
-
-- `npm run pack`: unpacked app in `release/win-unpacked/` (used by the packaged E2E).
-- `npm run dist`: `release/Trawler-Setup-<version>.exe` (NSIS installer; per-user by default, choosing 'all users' in the installer asks for administrator rights; choose the folder) and `release/Trawler-<version>-portable.exe`.
-- `npm run test:packaged`: builds the unpacked app and runs the E2E against it.
-- `npm run make-icon`: re-renders `build/icon.png` from `build/icon.svg` (only needed when the logo changes).
-
-The portable exe keeps its settings, history and app state in a `TrawlerData` folder next to it; the installed app uses `%APPDATA%\Trawler`. `TRAWLER_USER_DATA=<folder>` overrides both.
-
-The build is not code-signed: Windows SmartScreen shows a warning the first time ("More info" then "Run anyway"). Signing needs a certificate and is out of scope.
-
-Bumping the version: change `version` in `package.json` **and** `TRAWLER_VERSION` in `src/engine/version.ts` (a test checks they match).
-
-## Command line (headless)
-
-    npm start -- --trawler-cli --url https://example.com/template/ --out ./mirror
-    npm start -- --trawler-cli --kind analyze --url https://example.com/template/
-
-`npm start` builds the main process and launches Electron via `scripts/start.mjs`. That launcher:
-- removes `ELECTRON_RUN_AS_NODE`, which terminals inside VS Code set;
-- passes `--` before your options, because on Windows Electron refuses to start when a URL argument is followed by more arguments.
-
-If you call `electron .` directly, do both yourself, or write `--url=<url>`.
-
-Options:
-- `--kind download|analyze` (default `download`)
-- `--mode auto|static|js` (default from settings: `auto`)
-- `--policy overwrite|merge|fail`, for a non-empty output folder
-- `--settings '<json>'`: any settings from the spec, e.g. `'{"maxPages":50}'`
-
-Progress events go to stderr as JSON lines. The final result goes to stdout as one line starting with `TRAWLER_RESULT `.
-
-Exit codes:
-- `0` done (also with errors)
-- `1` failed
-- `2` cancelled
-- `64` bad arguments
-
-Headless runs use a throwaway browser profile in the temp folder, and stale profiles are removed on later runs.
-
-## Tests
-
-    npm test                # unit + Node integration
-    npm run test:electron   # builds the main process and runs real Electron end-to-end tests
+[MIT](LICENSE) &copy; 2026 RKEUS
