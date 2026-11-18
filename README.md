@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="build/icon.png" alt="Trawler logo" width="128" height="128">
+
 # Trawler
 
 **Cast a URL. Haul back the whole template.**
