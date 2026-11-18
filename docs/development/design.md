@@ -1,7 +1,7 @@
 # Trawler — Design Spec
 
 - **Date:** 2026-11-16
-- **Status:** Implemented (see the roadmap for what each plan delivered)
+- **Status:** Implemented
 - **One-liner:** Desktop app that mirrors a website template (static or JS-rendered) into a local folder. It keeps the server's folder structure and detects the template's architecture automatically.
 
 ---
@@ -34,7 +34,7 @@ Trawler is intended for templates the user owns a license for, free/open templat
 |---|---|
 | Shell | Electron |
 | Language | TypeScript (strict) |
-| Build | `esbuild` for the main process and the preload; Vite for the React renderer (Plan 3b) |
+| Build | `esbuild` for the main process and the preload; Vite for the React renderer |
 | Packaging | `electron-builder`: NSIS installer (per-user) and portable `.exe`, Windows x64, unsigned |
 | UI | React (renderer process) |
 | HTML parsing | `parse5` (via `cheerio` for querying) |

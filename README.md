@@ -66,7 +66,7 @@ npm run test:e2e        # UI end-to-end tests
 npm run dist            # installer + portable exe in release/
 ```
 
-Built with Electron, TypeScript, React and Vite. Building, packaging and headless details are in [docs/BUILDING.md](docs/BUILDING.md). The design is in [docs/development/design.md](docs/development/design.md), with the implementation plans next to it.
+Built with Electron, TypeScript, React and Vite. Building, packaging and headless details are in [docs/BUILDING.md](docs/BUILDING.md). The design is in [docs/development/design.md](docs/development/design.md).
 
 ## License
 
